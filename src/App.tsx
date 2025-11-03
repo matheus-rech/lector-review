@@ -98,6 +98,7 @@ function PDFViewerContent({
   onUpdateSearchHighlights,
   onPageChange,
   onJumpToPageReady,
+  onSearchResultsData,
 }: {
   highlights: LabeledHighlight[];
   onAddHighlight: (rect: Rect, pageNumber: number, label: string) => void;
@@ -106,6 +107,7 @@ function PDFViewerContent({
   onUpdateSearchHighlights: (searchHighlights: LabeledHighlight[]) => void;
   onPageChange: (page: number, total: number) => void;
   onJumpToPageReady: (jumpFn: (page: number) => void) => void;
+  onSearchResultsData: (results: any[]) => void;
 }) {
   // Use Lector hooks
   const selectionDimensions = useSelectionDimensions();
@@ -143,14 +145,17 @@ function PDFViewerContent({
   useEffect(() => {
     if (searchResults?.exactMatches && searchResults.exactMatches.length > 0) {
       onSearchResultsChange(searchResults.exactMatches.length);
-      
+
+      // Pass raw search results to parent for display
+      onSearchResultsData(searchResults.exactMatches);
+
       // Convert search results to highlight format
       const searchHighlights: LabeledHighlight[] = searchResults.exactMatches.map((match: any, index: number) => {
         // Extract rect from match - the structure may vary
-        const rect = match.rects && match.rects[0] ? match.rects[0] : 
+        const rect = match.rects && match.rects[0] ? match.rects[0] :
                      match.rect ? match.rect :
                      { x: 100, y: 100, width: 200, height: 20 }; // fallback
-        
+
         return {
           id: `search-${index}-${Date.now()}`,
           label: `Search: "${searchTerm}"`,
@@ -162,17 +167,18 @@ function PDFViewerContent({
           height: rect.height || 20,
         };
       });
-      
+
       // Add search highlights (replacing old search highlights)
       const userHighlights = highlights.filter(h => h.kind !== "search");
       const allHighlights = [...userHighlights, ...searchHighlights];
-      
+
       // Update parent component's highlights via callback
       onUpdateSearchHighlights(searchHighlights);
     } else {
       onSearchResultsChange(0);
+      onSearchResultsData([]);
     }
-  }, [searchResults, searchTerm, onSearchResultsChange]);
+  }, [searchResults, searchTerm, onSearchResultsChange, onSearchResultsData]);
   
   // Handle text selection - store pending selection
   useEffect(() => {
@@ -308,6 +314,8 @@ export default function App() {
   /** Search */
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResultCount, setSearchResultCount] = useState(0);
+  const [searchResultsData, setSearchResultsData] = useState<any[]>([]);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
 
   /** Highlights */
   const [highlights, setHighlights] = useState<LabeledHighlight[]>(() => {
@@ -583,6 +591,37 @@ export default function App() {
       return [...userHighlights, ...searchHighlights];
     });
   }, []);
+
+  /** Handle search results data */
+  const handleSearchResultsData = useCallback((results: any[]) => {
+    setSearchResultsData(results);
+    setCurrentSearchIndex(0); // Reset to first result
+  }, []);
+
+  /** Navigate to specific search result */
+  const jumpToSearchResult = useCallback((index: number) => {
+    if (searchResultsData[index] && jumpToPageFn) {
+      const result = searchResultsData[index];
+      jumpToPageFn(result.pageNumber);
+      setCurrentSearchIndex(index);
+    }
+  }, [searchResultsData, jumpToPageFn]);
+
+  /** Navigate to next search result */
+  const nextSearchResult = useCallback(() => {
+    if (searchResultsData.length > 0) {
+      const nextIndex = (currentSearchIndex + 1) % searchResultsData.length;
+      jumpToSearchResult(nextIndex);
+    }
+  }, [currentSearchIndex, searchResultsData.length, jumpToSearchResult]);
+
+  /** Navigate to previous search result */
+  const prevSearchResult = useCallback(() => {
+    if (searchResultsData.length > 0) {
+      const prevIndex = (currentSearchIndex - 1 + searchResultsData.length) % searchResultsData.length;
+      jumpToSearchResult(prevIndex);
+    }
+  }, [currentSearchIndex, searchResultsData.length, jumpToSearchResult]);
   
   /** Clear search highlights when search is cleared */
   useEffect(() => {
@@ -653,8 +692,8 @@ export default function App() {
           />
         </div>
 
-        {/* Search */}
-        <div className="space-y-1">
+        {/* Enhanced Search */}
+        <div className="space-y-2">
           <label className="text-xs font-semibold">Search</label>
           <input
             className="w-full border p-1 rounded text-sm"
@@ -662,10 +701,55 @@ export default function App() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+
           {searchResultCount > 0 && (
-            <div className="text-xs text-gray-600">
-              Found {searchResultCount} match{searchResultCount !== 1 ? 'es' : ''}
-            </div>
+            <>
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-gray-600">
+                  Match {currentSearchIndex + 1} of {searchResultCount}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={prevSearchResult}
+                    className="px-2 py-1 text-xs border rounded hover:bg-gray-100"
+                    title="Previous match"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    onClick={nextSearchResult}
+                    className="px-2 py-1 text-xs border rounded hover:bg-gray-100"
+                    title="Next match"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+
+              {/* Results List */}
+              <div className="max-h-40 overflow-y-auto border rounded text-xs bg-white">
+                {searchResultsData.slice(0, 10).map((result: any, index: number) => (
+                  <div
+                    key={index}
+                    onClick={() => jumpToSearchResult(index)}
+                    className={`p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 ${
+                      index === currentSearchIndex ? 'bg-blue-100' : ''
+                    }`}
+                  >
+                    <div className="font-medium text-blue-700">Page {result.pageNumber}</div>
+                    <div className="text-gray-600 truncate">
+                      {result.text?.substring(0, 60) || 'Match found'}...
+                    </div>
+                  </div>
+                ))}
+                {searchResultsData.length > 10 && (
+                  <div className="p-2 text-center text-gray-500 italic">
+                    Showing first 10 of {searchResultCount} results
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 
@@ -727,6 +811,7 @@ export default function App() {
                   onUpdateSearchHighlights={handleSearchHighlights}
                   onPageChange={handlePageChange}
                   onJumpToPageReady={handleJumpToPageReady}
+                  onSearchResultsData={handleSearchResultsData}
                 />
               </Root>
             </div>
