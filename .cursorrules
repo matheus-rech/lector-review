@@ -1,0 +1,425 @@
+# Lector Review - Cursor AI Rules
+
+## Project Overview
+A React-based PDF viewer application for systematic review and data extraction from research papers. Built for researchers conducting meta-analyses and literature reviews.
+
+**Tech Stack:**
+- React 19 (functional components only)
+- TypeScript 5.6 (strict mode)
+- Vite 5.4 (build tool)
+- Tailwind CSS 3.4 (utility-first styling)
+- @anaralabs/lector 3.7 (PDF viewer library)
+- PDF.js 4.6 (PDF rendering)
+- LocalStorage + IndexedDB (data persistence)
+
+**Version:** 2.0.0 | **Status:** Production Ready
+
+---
+
+## Critical Architecture Constraints
+
+### 1. Lector Hooks Context Requirement ⚠️ MANDATORY
+**ALWAYS follow this pattern:**
+
+```typescript
+// ❌ WRONG - Hooks called outside Root context
+function App() {
+  const { jumpToPage } = usePdfJump(); // ERROR!
+  return <Root documentSource={pdf}>...</Root>
+}
+
+// ✅ CORRECT - Hooks inside Root context
+function App() {
+  return (
+    <Root documentSource={pdf}>
+      <PDFViewerContent />  {/* Hooks work here */}
+    </Root>
+  );
+}
+
+function PDFViewerContent() {
+  const { jumpToPage } = usePdfJump(); // ✅ Works!
+  const { searchResults } = useSearch();
+  const selectionDimensions = useSelectionDimensions();
+  // ... use hooks here
+}
+```
+
+**Lector hooks that MUST be inside Root:**
+- `usePdfJump()` - Page navigation
+- `useSearch()` - PDF text search
+- `useSelectionDimensions()` - Text selection tracking
+
+### 2. LocalStorage Namespacing Pattern
+**ALWAYS use project-based namespacing:**
+
+```typescript
+// Pattern: proj:{projectName}:{dataType}
+const key = (project: string, name: string) => `proj:${project}:${name}`;
+
+// Examples:
+// proj:default:highlights
+// proj:study-2024:pageForm
+// proj:meta-analysis:templates
+```
+
+### 3. Per-Page Template System
+**Field data is tied to specific pages:**
+
+```typescript
+// Template structure
+type FieldTemplate = { id: string; label: string; placeholder?: string };
+const templates: Record<number, FieldTemplate[]> = {
+  1: [{ id: "study_id", label: "Study ID" }],
+  2: [{ id: "study_design", label: "Design" }],
+  // Different fields per page
+};
+
+// Data storage uses composite keys
+const fieldKey = `${pageNumber}:${fieldId}`;
+// Example: "1:study_id" = "10.1161/STROKEAHA.116.014078"
+```
+
+---
+
+## Code Style & Patterns
+
+### React Components
+```typescript
+// ✅ ALWAYS use functional components with TypeScript
+interface Props {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+export function Modal({ title, onClose, children }: Props) {
+  // Implementation
+}
+
+// ❌ NEVER use class components
+// ❌ NEVER use PropTypes (use TypeScript instead)
+```
+
+### Custom Hooks
+```typescript
+// ✅ Prefix with 'use', return object or array
+export function useDarkMode() {
+  const [isDark, setIsDark] = useState(false);
+  // ... logic
+  return { isDark, toggleDark: () => setIsDark(!isDark) };
+}
+
+// ✅ Include proper dependency arrays
+useEffect(() => {
+  // effect logic
+}, [dependency1, dependency2]); // ALWAYS specify deps
+```
+
+### Utility Functions
+```typescript
+// ✅ Pure functions with JSDoc
+/**
+ * Exports project data to JSON format
+ * @param projectData - Complete project data
+ * @param projectName - Name for filename
+ * @returns Blob for download
+ */
+export function exportToJSON(projectData: any, projectName: string): Blob {
+  // Implementation
+}
+```
+
+### Error Handling
+```typescript
+// ✅ Always wrap risky operations
+try {
+  const result = await riskyOperation();
+  showToast("Success!", "success");
+} catch (error) {
+  console.error("Operation failed:", error);
+  showToast(error.message, "error");
+}
+```
+
+### Toast Notifications
+```typescript
+// ✅ Use for user feedback
+showToast("Project created!", "success");
+showToast("Export failed", "error");
+showToast("Loading PDF...", "info");
+
+// ❌ NEVER use alert(), prompt(), or confirm()
+// Use Modal component instead
+```
+
+---
+
+## File Organization
+
+### Component Structure
+```typescript
+// ✅ Order: imports → types → component → export
+import { useState } from 'react';
+import { SomeType } from '@/types';
+
+interface ComponentProps {
+  // props
+}
+
+function Component({ prop1, prop2 }: ComponentProps) {
+  // state
+  // effects
+  // handlers
+  // render
+}
+
+export { Component };
+```
+
+### Import Preferences
+```typescript
+// ✅ Use barrel exports
+import { Modal, Toast } from '@/components';
+import { useDarkMode, useDebounce } from '@/hooks';
+import { exportToJSON, validateField } from '@/utils';
+
+// ❌ Avoid deep imports
+import { Modal } from '@/components/Modal';
+```
+
+---
+
+## Testing Requirements
+
+### Unit Tests (Vitest)
+```typescript
+// ✅ Test all utility functions
+import { describe, it, expect } from 'vitest';
+
+describe('exportToJSON', () => {
+  it('creates valid JSON blob', () => {
+    const result = exportToJSON(data, 'test');
+    expect(result.type).toBe('application/json');
+  });
+});
+```
+
+### E2E Tests (Playwright)
+```typescript
+// ✅ Test critical user flows
+test('exports CSV with data', async ({ page }) => {
+  await page.fill('[data-testid="field-input"]', '112');
+  await page.click('[aria-label="Export CSV"]');
+  // Assert download occurred
+});
+```
+
+---
+
+## Pending Integration Tasks
+
+### 1. PDF Upload Component (2 hours)
+**Files:** `src/components/PDFUpload.tsx`, `src/utils/pdfStorage.ts`
+**Status:** Components ready, needs integration into App.tsx
+**Steps:**
+1. Import PDFUpload and usePDFManager hook
+2. Add PDF list UI to sidebar
+3. Replace static `source` state with dynamic PDF selection
+4. Store PDFs in IndexedDB via pdfStorage utils
+
+### 2. Template Manager (2 hours)
+**File:** `src/components/TemplateManager.tsx`
+**Status:** Component ready, needs modal integration
+**Steps:**
+1. Add "Manage Templates" button to sidebar
+2. Open TemplateManager in Modal
+3. Connect template state to form generation
+4. Persist templates in localStorage
+
+### 3. Schema-Based Forms (3 hours)
+**Files:** `src/components/SchemaForm.tsx`, `src/utils/schemaParser.ts`, `schema.json`
+**Status:** Infrastructure ready, needs App.tsx integration
+**Steps:**
+1. Replace current form fields with SchemaForm
+2. Parse schema.json on mount
+3. Map field data to schema structure
+4. Add source traceability (link highlights to fields)
+
+---
+
+## Performance Optimization
+
+### Debouncing
+```typescript
+// ✅ Use for search inputs
+const debouncedSearch = useDebounce(searchTerm, 500);
+
+useEffect(() => {
+  if (debouncedSearch) {
+    performSearch(debouncedSearch);
+  }
+}, [debouncedSearch]);
+```
+
+### Memoization
+```typescript
+// ✅ Memoize expensive computations
+const currentPageTemplate = useMemo(
+  () => templates[currentPage] || [],
+  [templates, currentPage]
+);
+```
+
+### Lazy Loading
+```typescript
+// ✅ Consider for large components
+const HeavyComponent = lazy(() => import('./HeavyComponent'));
+```
+
+---
+
+## Known Issues & Gotchas
+
+### PDF Loading
+- PDF.js worker must be configured in App.tsx:
+  ```typescript
+  GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.mjs",
+    import.meta.url
+  ).toString();
+  ```
+
+### Search Performance
+- Debouncing implemented (500ms)
+- May need optimization for PDFs > 100 pages
+- Consider pagination for search results
+
+### LocalStorage Limits
+- Typical limit: 5-10MB per domain
+- Use IndexedDB for PDFs (handled by pdfStorage.ts)
+- Warn users if approaching storage limits
+
+### Dark Mode
+- Uses CSS variables: `--bg-primary`, `--text-primary`, etc.
+- Toggle adds `dark` class to `<html>` element
+- Preference saved to localStorage
+
+---
+
+## Tailwind CSS Patterns
+
+### Color System
+```typescript
+// ✅ Use semantic color names
+className="bg-blue-600 hover:bg-blue-700"
+className="text-gray-900 dark:text-gray-100"
+
+// ✅ Dark mode with dark: prefix
+className="bg-white dark:bg-gray-800"
+```
+
+### Common Patterns
+```typescript
+// Button
+className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+
+// Input
+className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+
+// Card
+className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow"
+```
+
+---
+
+## Accessibility Requirements
+
+### ARIA Labels
+```typescript
+// ✅ Add to all interactive elements
+<button aria-label="Toggle dark mode">🌙</button>
+<input aria-label="Search PDF" role="searchbox" />
+<button aria-label="Export CSV">Export CSV</button>
+```
+
+### Keyboard Navigation
+```typescript
+// ✅ Support keyboard shortcuts
+useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') closeModal();
+    if (e.ctrlKey && e.key === 'z') undo();
+  };
+  window.addEventListener('keydown', handler);
+  return () => window.removeEventListener('keydown', handler);
+}, []);
+```
+
+---
+
+## Common Commands
+
+```bash
+# Development
+pnpm dev              # Start dev server (localhost:5173)
+pnpm build            # Production build
+pnpm preview          # Preview production build
+
+# Testing
+pnpm test             # Run unit tests (Vitest)
+pnpm test:e2e         # Run E2E tests (Playwright)
+pnpm test:coverage    # Test coverage report
+
+# Code Quality
+pnpm type-check       # TypeScript validation
+pnpm lint             # ESLint
+pnpm format           # Prettier formatting
+```
+
+---
+
+## When Suggesting Code Changes
+
+1. **ALWAYS check if Lector hooks are inside Root context**
+2. **ALWAYS use TypeScript with proper types**
+3. **ALWAYS add error handling with try/catch**
+4. **ALWAYS use Toast notifications for user feedback**
+5. **ALWAYS follow the LocalStorage namespacing pattern**
+6. **ALWAYS add ARIA labels to new interactive elements**
+7. **ALWAYS write tests for new utilities**
+8. **ALWAYS update relevant documentation**
+
+---
+
+## Priority Order for New Features
+
+1. **High**: Core functionality, data integrity, user experience
+2. **Medium**: UI polish, performance optimization, accessibility
+3. **Low**: Nice-to-have features, visual enhancements
+
+---
+
+## Questions to Ask Before Coding
+
+- [ ] Does this require Lector hooks? (If yes, is it inside Root?)
+- [ ] Does this modify LocalStorage? (If yes, using correct namespace?)
+- [ ] Does this need error handling? (Almost always yes)
+- [ ] Does this need user feedback? (Use Toast)
+- [ ] Does this need tests? (For utils and critical logic, yes)
+- [ ] Does this affect accessibility? (Add ARIA labels)
+- [ ] Is this performance-sensitive? (Consider memoization/debouncing)
+
+---
+
+## Resources
+
+- Lector Docs: https://lector-weld.vercel.app/docs
+- PDF.js Docs: https://mozilla.github.io/pdf.js/
+- React Docs: https://react.dev/
+- Tailwind Docs: https://tailwindcss.com/docs
+- TypeScript Docs: https://www.typescriptlang.org/docs/
+
+---
+
+**Remember**: This is a production-ready application used by researchers. Prioritize data integrity, user experience, and accessibility in all changes.
