@@ -111,9 +111,10 @@ function PDFViewerContent({
 }) {
   // Use Lector hooks
   const selectionDimensions = useSelectionDimensions();
-  const { jumpToPage } = usePdfJump();
+  const { jumpToPage, jumpToHighlightRects } = usePdfJump();
   const currentPageNumber = usePDFPageNumber();
   const pdf = usePdf();
+  const getPdfPageProxy = usePdf((state) => state.getPdfPageProxy);
   const totalPages = pdf?.numPages || 0;
   const { searchResults, search } = useSearch();
   
@@ -141,44 +142,100 @@ function PDFViewerContent({
     }
   }, [searchTerm, search]);
   
-  // Convert search results to highlights and update count
+  // Convert search results to highlights and update count using calculateHighlightRects
   useEffect(() => {
     if (searchResults?.exactMatches && searchResults.exactMatches.length > 0) {
       onSearchResultsChange(searchResults.exactMatches.length);
-
-      // Pass raw search results to parent for display
       onSearchResultsData(searchResults.exactMatches);
 
-      // Convert search results to highlight format
-      const searchHighlights: LabeledHighlight[] = searchResults.exactMatches.map((match: any, index: number) => {
-        // Extract rect from match - the structure may vary
-        const rect = match.rects && match.rects[0] ? match.rects[0] :
-                     match.rect ? match.rect :
-                     { x: 100, y: 100, width: 200, height: 20 }; // fallback
+      // Use calculateHighlightRects for accurate positioning
+      let cancelled = false;
 
-        return {
-          id: `search-${index}-${Date.now()}`,
-          label: `Search: "${searchTerm}"`,
-          kind: "search" as const,
-          pageNumber: match.pageNumber || 1,
-          x: rect.x || 0,
-          y: rect.y || 0,
-          width: rect.width || 200,
-          height: rect.height || 20,
-        };
-      });
+      const createSearchHighlights = async () => {
+        const searchHighlights: LabeledHighlight[] = [];
 
-      // Add search highlights (replacing old search highlights)
-      const userHighlights = highlights.filter(h => h.kind !== "search");
-      const allHighlights = [...userHighlights, ...searchHighlights];
+        for (const [index, match] of searchResults.exactMatches.entries()) {
+          if (cancelled) break;
 
-      // Update parent component's highlights via callback
-      onUpdateSearchHighlights(searchHighlights);
+          try {
+            // Get page proxy for accurate rect calculation
+            const pageProxy = getPdfPageProxy(match.pageNumber);
+
+            if (pageProxy) {
+              // Use calculateHighlightRects for accurate positioning
+              const rects = await calculateHighlightRects(pageProxy, {
+                pageNumber: match.pageNumber,
+                text: match.text,
+                matchIndex: match.matchIndex || 0,
+              });
+
+              // Convert accurate rects to our highlight format
+              rects.forEach((rect) => {
+                searchHighlights.push({
+                  id: `search-${index}-${searchHighlights.length}-${Date.now()}`,
+                  label: `Search: "${searchTerm}"`,
+                  kind: "search" as const,
+                  pageNumber: rect.pageNumber,
+                  x: rect.left,
+                  y: rect.top,
+                  width: rect.width,
+                  height: rect.height,
+                });
+              });
+            } else {
+              // Fallback to manual extraction if page proxy unavailable
+              const rect = match.rects && match.rects[0] ? match.rects[0] :
+                           match.rect ? match.rect :
+                           { x: 100, y: 100, width: 200, height: 20 };
+
+              searchHighlights.push({
+                id: `search-${index}-${Date.now()}`,
+                label: `Search: "${searchTerm}"`,
+                kind: "search" as const,
+                pageNumber: match.pageNumber || 1,
+                x: rect.x || 0,
+                y: rect.y || 0,
+                width: rect.width || 200,
+                height: rect.height || 20,
+              });
+            }
+          } catch (error) {
+            console.error('Failed to calculate highlight rects for match:', error);
+
+            // Fallback to manual extraction on error
+            const rect = match.rects && match.rects[0] ? match.rects[0] :
+                         match.rect ? match.rect :
+                         { x: 100, y: 100, width: 200, height: 20 };
+
+            searchHighlights.push({
+              id: `search-${index}-${Date.now()}`,
+              label: `Search: "${searchTerm}"`,
+              kind: "search" as const,
+              pageNumber: match.pageNumber || 1,
+              x: rect.x || 0,
+              y: rect.y || 0,
+              width: rect.width || 200,
+              height: rect.height || 20,
+            });
+          }
+        }
+
+        if (!cancelled) {
+          onUpdateSearchHighlights(searchHighlights);
+        }
+      };
+
+      createSearchHighlights();
+
+      // Cleanup function to prevent state updates after unmount
+      return () => {
+        cancelled = true;
+      };
     } else {
       onSearchResultsChange(0);
       onSearchResultsData([]);
     }
-  }, [searchResults, searchTerm, onSearchResultsChange, onSearchResultsData]);
+  }, [searchResults, searchTerm, getPdfPageProxy, onSearchResultsChange, onSearchResultsData, onUpdateSearchHighlights]);
   
   // Handle text selection - store pending selection
   useEffect(() => {
@@ -338,7 +395,13 @@ export default function App() {
   /** Page Navigation - synced with PDFViewerContent */
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(9);
+  const [pageInputValue, setPageInputValue] = useState("1");
   const [jumpToPageFn, setJumpToPageFn] = useState<((page: number) => void) | null>(null);
+
+  // Sync page input with current page
+  useEffect(() => {
+    setPageInputValue(currentPage.toString());
+  }, [currentPage]);
 
   /** Handle jumpToPage ready from PDFViewerContent */
   const handleJumpToPageReady = useCallback((jumpFn: (page: number) => void) => {
@@ -820,26 +883,72 @@ export default function App() {
 
         {/* Right sidebar */}
         <aside className="border-l p-3 space-y-4 bg-white overflow-y-auto">
-          {/* Page Navigation */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold">Page</label>
+          {/* Enhanced Page Navigation */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold">Page Navigation</label>
+
+            {/* Button navigation with direct input */}
             <div className="flex items-center gap-2">
-              <button 
-                className="px-2 border rounded hover:bg-gray-100" 
+              <button
+                className="px-2 py-1 text-xs border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => jumpToPage(currentPage - 1)}
                 disabled={currentPage <= 1}
                 aria-label="Previous page"
+                title="Previous page"
               >
                 ◀
               </button>
-              <span className="text-sm">{currentPage} / {totalPages}</span>
-              <button 
-                className="px-2 border rounded hover:bg-gray-100" 
+
+              {/* Direct page input */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={pageInputValue}
+                  onChange={(e) => setPageInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const pageNum = parseInt(pageInputValue);
+                      if (pageNum >= 1 && pageNum <= totalPages) {
+                        jumpToPage(pageNum);
+                      }
+                    }
+                  }}
+                  className="w-12 px-2 py-1 border rounded text-center text-xs"
+                  aria-label="Go to page"
+                />
+                <span className="text-xs text-gray-500">/ {totalPages}</span>
+              </div>
+
+              <button
+                className="px-2 py-1 text-xs border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => jumpToPage(currentPage + 1)}
                 disabled={currentPage >= totalPages}
                 aria-label="Next page"
+                title="Next page"
               >
                 ▶
+              </button>
+            </div>
+
+            {/* Quick jump buttons */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => jumpToPage(1)}
+                disabled={currentPage === 1}
+                className="flex-1 text-xs px-2 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Jump to first page"
+              >
+                First
+              </button>
+              <button
+                onClick={() => jumpToPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="flex-1 text-xs px-2 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Jump to last page"
+              >
+                Last
               </button>
             </div>
           </div>
