@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { GlobalWorkerOptions } from "pdfjs-dist";
 import "pdfjs-dist/web/pdf_viewer.css";
 import {
@@ -10,7 +10,9 @@ import {
   ColoredHighlightLayer,
   useSelectionDimensions,
   usePdfJump,
+  usePDFPageNumber,
   useSearch,
+  usePdf,
   type ColoredHighlight,
 } from "@anaralabs/lector";
 import { Toast, useToast } from "./components/Toast";
@@ -96,8 +98,11 @@ function PDFViewerContent({
 }) {
   // Use Lector hooks
   const selectionDimensions = useSelectionDimensions();
-  const { currentPageNumber, totalPages, jumpToPage } = usePdfJump();
-  const { searchResults, findExactMatches } = useSearch();
+  const { jumpToPage } = usePdfJump();
+  const currentPageNumber = usePDFPageNumber();
+  const pdf = usePdf();
+  const totalPages = pdf?.numPages || 0;
+  const { searchResults, search } = useSearch();
   
   // Expose jumpToPage function to parent
   useEffect(() => {
@@ -119,9 +124,9 @@ function PDFViewerContent({
   // Perform search when searchTerm changes
   useEffect(() => {
     if (searchTerm && searchTerm.trim().length > 0) {
-      findExactMatches({ searchText: searchTerm });
+      search(searchTerm);
     }
-  }, [searchTerm, findExactMatches]);
+  }, [searchTerm, search]);
   
   // Convert search results to highlights and update count
   useEffect(() => {
