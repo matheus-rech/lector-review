@@ -3,6 +3,7 @@ import {
   calculateHighlightRects,
   CanvasLayer,
   CurrentZoom,
+  CustomLayer,
   Page,
   Pages,
   Root,
@@ -277,6 +278,7 @@ function PDFViewerContent({
   // Notify parent of page changes
   useEffect(() => {
     if (currentPageNumber && totalPages) {
+      console.log(`[PDFViewerContent] Page changed to ${currentPageNumber} / ${totalPages}`);
       onPageChange(currentPageNumber, totalPages);
     }
   }, [currentPageNumber, totalPages, onPageChange]);
@@ -501,34 +503,6 @@ function PDFViewerContent({
     }
   }, [pendingSelection, onAddHighlight, onRequestHighlightLabel]);
 
-  // Custom highlight layer component
-  const CustomHighlightLayer = ({ pageNumber }: { pageNumber: number }) => {
-    const pageHighlights = highlights.filter(
-      (h) => h.pageNumber === pageNumber
-    );
-
-    return (
-      <div className="absolute inset-0 pointer-events-none">
-        {pageHighlights.map((h) => (
-          <div
-            key={h.id}
-            className="absolute pointer-events-none"
-            style={{
-              left: `${h.x}px`,
-              top: `${h.y}px`,
-              width: `${h.width}px`,
-              height: `${h.height}px`,
-              backgroundColor:
-                h.kind === "search"
-                  ? "rgba(255, 255, 0, 0.4)"
-                  : "rgba(0, 255, 0, 0.3)",
-            }}
-          />
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div className="relative w-full h-full">
       {/* Selection Tooltip with Highlight Button */}
@@ -552,24 +526,37 @@ function PDFViewerContent({
       </SelectionTooltip>
 
       <Pages className="p-6">
-        <>
-          {totalPages > 0 ? (
-            Array.from({ length: totalPages }, (_, index) => (
-              <Page key={index + 1}>
-                <CanvasLayer />
-                <TextLayer />
-                <CustomHighlightLayer pageNumber={index + 1} />
-              </Page>
-            ))
-          ) : (
-            // Render single page initially to allow PDF to load
-            <Page key={1}>
-              <CanvasLayer />
-              <TextLayer />
-              <CustomHighlightLayer pageNumber={1} />
-            </Page>
-          )}
-        </>
+        <Page>
+          <CanvasLayer />
+          <TextLayer />
+          <CustomLayer>
+            {(pageNumber) => {
+              const pageHighlights = highlights.filter(
+                (h) => h.pageNumber === pageNumber
+              );
+              return (
+                <div className="absolute inset-0 pointer-events-none">
+                  {pageHighlights.map((h) => (
+                    <div
+                      key={h.id}
+                      className="absolute pointer-events-none"
+                      style={{
+                        left: `${h.x}px`,
+                        top: `${h.y}px`,
+                        width: `${h.width}px`,
+                        height: `${h.height}px`,
+                        backgroundColor:
+                          h.kind === "search"
+                            ? "rgba(255, 255, 0, 0.4)"
+                            : "rgba(0, 255, 0, 0.3)",
+                      }}
+                    />
+                  ))}
+                </div>
+              );
+            }}
+          </CustomLayer>
+        </Page>
       </Pages>
     </div>
   );
@@ -683,7 +670,6 @@ export default function App() {
   const jumpToPageFn = useRef<
     ((page: number, options?: { behavior: "auto" }) => void) | null
   >(null);
-  const [isJumpToPageReady, setIsJumpToPageReady] = useState(false);
 
   /** Input Modal State */
   const [inputModalState, setInputModalState] = useState<{
@@ -726,7 +712,6 @@ export default function App() {
   const handleJumpToPageReady = useCallback(
     (jumpFn: (page: number, options?: { behavior: "auto" }) => void) => {
       jumpToPageFn.current = jumpFn;
-      setIsJumpToPageReady(true);
     },
     []
   );
@@ -808,8 +793,10 @@ export default function App() {
 
   /** Handle page change from PDFViewerContent */
   const handlePageChange = useCallback((page: number, total: number) => {
+    console.log(`[App.handlePageChange] Setting page to ${page} / ${total}`);
     setCurrentPage(page);
     setTotalPages(total);
+    setPageInputValue(String(page)); // Sync input with current page
   }, []);
 
   /** Switch project */
@@ -987,16 +974,21 @@ export default function App() {
   /** Jump to page */
   const jumpToPage = useCallback(
     (page: number) => {
+      console.log(`[App.jumpToPage] Attempting to jump to page ${page}, total pages: ${totalPages}, ready: ${jumpToPageFn.current !== null}`);
       if (page < 1 || page > totalPages) {
+        console.log(`[App.jumpToPage] Page ${page} out of bounds`);
         return;
       }
 
       if (jumpToPageFn.current) {
         try {
+          console.log(`[App.jumpToPage] Calling jumpToPageFn.current(${page})`);
           jumpToPageFn.current(page, { behavior: "auto" });
         } catch (err) {
           console.error("Error navigating to page:", err);
         }
+      } else {
+        console.error("[App.jumpToPage] jumpToPageFn.current is null!");
       }
     },
     [totalPages]
@@ -1536,7 +1528,7 @@ export default function App() {
                   className="w-12 px-2 py-1 border rounded text-center text-xs"
                   aria-label="Go to page"
                 />
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500" data-testid="page-indicator">
                   {currentPage} / {totalPages}
                 </span>
               </div>

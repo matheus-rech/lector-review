@@ -26,36 +26,36 @@ test.describe("Lector Review - Basic Features", () => {
   });
 
   test("should navigate between pages", async ({ page }) => {
-    // Listen to console logs
+    // Listen to all console logs to debug
     page.on("console", (msg) => {
-      if (
-        msg.text().includes("[App.jumpToPage]") ||
-        msg.text().includes("[PDFViewerContent]")
-      ) {
-        console.log("BROWSER:", msg.text());
-      }
+      console.log("BROWSER:", msg.text());
     });
 
-    // Check initial page
-    await expect(page.getByText(/1 \/ \d+/)).toBeVisible();
+    // Check initial page indicator
+    const pageIndicator = page.getByTestId("page-indicator");
+    await expect(pageIndicator).toHaveText("1 / 9");
 
     console.log("===== CLICKING NEXT PAGE BUTTON =====");
-    // Click next page button and wait for page indicator to update
+    // Click next page button
     const nextButton = page.getByRole("button", { name: "Next page" });
     await expect(nextButton).toHaveAttribute("aria-label", "Next page");
     await nextButton.click();
 
-    // Wait longer for smooth scrolling animation to complete
+    // Wait for page to change
     await page.waitForTimeout(2000);
 
     console.log("===== CHECKING IF PAGE CHANGED TO 2 =====");
-    await expect(page.getByText(/2 \/ \d+/)).toBeVisible({ timeout: 5000 });
+    // Check for page 2 indicator
+    await expect(pageIndicator).toHaveText("2 / 9", { timeout: 5000 });
 
-    // Click previous page button and wait for page indicator to update
+    // Click previous page button
     const prevButton = page.getByRole("button", { name: "Previous page" });
     await expect(prevButton).toHaveAttribute("aria-label", "Previous page");
     await prevButton.click();
-    await expect(page.getByText(/1 \/ \d+/)).toBeVisible({ timeout: 3000 });
+    
+    // Wait and check back at page 1
+    await page.waitForTimeout(1000);
+    await expect(pageIndicator).toHaveText("1 / 9", { timeout: 3000 });
   });
 
   test("should enter and persist data", async ({ page }) => {
