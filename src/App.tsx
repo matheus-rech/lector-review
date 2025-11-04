@@ -398,8 +398,8 @@ function PDFViewerContent({
   }, [pendingSelection, onAddHighlight, onRequestHighlightLabel]);
 
   return (
-    <div className="relative w-full h-full">
-      <Pages className="p-4 w-full dark:invert-[94%] dark:hue-rotate-180 dark:brightness-[80%] dark:contrast-[228%]">
+    <div className="relative w-full max-w-full h-full overflow-hidden flex items-center justify-center">
+      <Pages className="p-4 w-full max-w-full dark:invert-[94%] dark:hue-rotate-180 dark:brightness-[80%] dark:contrast-[228%]" style={{ transform: 'scale(0.85)', transformOrigin: 'center center' }}>
         <Page>
           <CanvasLayer />
           <TextLayer />
@@ -662,6 +662,7 @@ export default function App() {
 
   // UI state for new Lector features
   const [showThumbnails, setShowThumbnails] = useState(true);
+  const [showSchemaForm, setShowSchemaForm] = useState(true);
   const [showSearchUI, setShowSearchUI] = useState(true);
 
   // Parse schema on mount
@@ -1270,14 +1271,14 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 grid grid-cols-[1fr_340px]">
+      <main className={`flex-1 grid ${showSchemaForm ? 'grid-cols-[1fr_340px]' : 'grid-cols-1'} overflow-hidden`}>
         {/* PDF Viewer with Thumbnails and Zoom Controls */}
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full overflow-hidden">
           {/* PDF Viewer Grid with Optional Thumbnails - SINGLE Root wrapping everything */}
           <Root
             source={pdfSource}
-            className="flex-1 flex"
-            zoomOptions={{ minZoom: 0.5, maxZoom: 3 }}
+            className="flex-1 flex flex-col"
+            zoomOptions={{ minZoom: 0.5, maxZoom: 3, initialZoom: 0.7 }}
             loader={
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
@@ -1296,17 +1297,7 @@ export default function App() {
               info("PDF loaded successfully");
             }}
           >
-            <Search>
-              {/* Search Sidebar */}
-              {showSearchUI && (
-                <div className="w-80 border-r bg-white overflow-y-auto flex-shrink-0">
-                  <SearchUI />
-                </div>
-              )}
-              
-              {/* Main PDF Area */}
-              <div className="flex-1 flex flex-col">
-            {/* Zoom Controls Bar - NOW INSIDE ROOT */}
+            {/* Zoom Controls Bar */}
             <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
               <div className="flex items-center gap-2">
                 <button
@@ -1333,6 +1324,18 @@ export default function App() {
                 >
                   {showThumbnails ? "◀ Hide" : "▶ Show"} Thumbnails
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSchemaForm(!showSchemaForm)}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-200"
+                  title="Toggle schema form"
+                  aria-label={
+                    showSchemaForm ? "Hide schema form" : "Show schema form"
+                  }
+                  aria-expanded={showSchemaForm ? "true" : "false"}
+                >
+                  {showSchemaForm ? "◀ Hide" : "▶ Show"} Form
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1342,31 +1345,33 @@ export default function App() {
               </div>
             </div>
 
-            {/* PDF Content Grid */}
-            <div
-              className={`flex-1 grid min-h-0 relative ${
-                showThumbnails ? "grid-cols-[24rem,1fr]" : "grid-cols-[0,1fr]"
-              } transition-all duration-300`}
-            >
+            {/* PDF Content Grid - Search and Pages as siblings */}
+            <div className="flex-1 flex min-h-0 relative">
+              {/* Search Sidebar */}
+              {showSearchUI && (
+                <Search>
+                  <div className="w-80 border-r bg-white overflow-y-auto flex-shrink-0">
+                    <SearchUI />
+                  </div>
+                </Search>
+              )}
+
               {/* Thumbnails Sidebar */}
               {showThumbnails && (
-                <div className="overflow-y-auto overflow-x-hidden h-full">
-                  <div className="w-96 overflow-x-hidden">
-                    <Thumbnails className="flex flex-col gap-4 items-center py-4">
-                      <Thumbnail className="transition-all w-48 hover:shadow-lg hover:outline hover:outline-gray-300" />
-                    </Thumbnails>
-                  </div>
+                <div className="overflow-y-auto overflow-x-hidden h-full w-96 border-r">
+                  <Thumbnails className="flex flex-col gap-4 items-center py-4">
+                    <Thumbnail className="transition-all w-48 hover:shadow-lg hover:outline hover:outline-gray-300" />
+                  </Thumbnails>
                 </div>
               )}
 
-              {/* Main PDF Viewer */}
-              <div className="overflow-y-auto h-full">
-                  <PDFViewerContent
+              {/* Main PDF Viewer - Pages component */}
+              <div className="flex-1 overflow-y-auto">
+                <PDFViewerContent
                   highlights={highlights}
                   onAddHighlight={addHighlight}
                   searchTerm={searchTerm}
                   onSearchResultsChange={setSearchResultCount}
-                  // onUpdateSearchHighlights removed - HighlightLayer handles highlighting
                   onPageChange={handlePageChange}
                   onJumpToPageReady={handleJumpToPageReady}
                   onSearchResultsData={handleSearchResultsData}
@@ -1375,15 +1380,14 @@ export default function App() {
                     console.error("Search error:", err);
                     error(`Search failed: ${err.message || "Unknown error"}`);
                   }}
-                  />
+                />
               </div>
             </div>
-              </div>
-            </Search>
           </Root>
         </div>
 
         {/* Right sidebar */}
+        {showSchemaForm && (
         <aside className="border-l p-3 space-y-4 bg-white overflow-y-auto">
           {/* Form Type Toggle */}
           <div className="flex items-center gap-2">
@@ -1583,6 +1587,7 @@ export default function App() {
             </ul>
           </div>
         </aside>
+        )}
       </main>
 
       {/* Template Manager Modal */}
