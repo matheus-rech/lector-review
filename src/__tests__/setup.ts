@@ -2,15 +2,6 @@
  * Test setup and global configuration
  */
 
-import { expect, afterEach } from 'vitest';
-import { cleanup } from '@testing-library/react';
-import '@testing-library/jest-dom/vitest';
-
-// Cleanup after each test
-afterEach(() => {
-  cleanup();
-});
-
 // Mock localStorage
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -29,8 +20,18 @@ const localStorageMock = (() => {
   };
 })();
 
-global.localStorage = localStorageMock as Storage;
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+});
 
 // Mock URL.createObjectURL
-global.URL.createObjectURL = () => 'mock-url';
-global.URL.revokeObjectURL = () => {};
+Object.defineProperty(globalThis.URL, 'createObjectURL', {
+  value: () => 'mock-url',
+  writable: true,
+});
+
+Object.defineProperty(globalThis.URL, 'revokeObjectURL', {
+  value: () => {},
+  writable: true,
+});
