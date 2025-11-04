@@ -999,7 +999,7 @@ export default function App() {
         }
       }
     },
-    [totalPages, isJumpToPageReady]
+    [totalPages]
   );
 
   /** PDF Upload handlers */

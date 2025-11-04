@@ -2,43 +2,53 @@
  * Utility Functions Barrel Exports
  *
  * This file provides a single import point for all utility functions.
- * Usage: import { exportToJSON, validateField } from '@/utils'
+ * Usage: import { exportProjectJSON, validateField } from '@/utils'
  */
 
 // Import/Export Utilities
 export {
-  exportToJSON,
-  exportToCSV,
-  importFromJSON,
-  type ExportData,
-  type CSVRow
+  exportProjectJSON,
+  exportProjectCSV,
+  importProjectJSON,
+  exportAllProjects,
+  importAllProjects,
+  generateSummaryReport,
+  exportSummaryReport,
+  type ProjectData
 } from './importExport';
 
 // Validation Utilities
 export {
   validateField,
-  validateYear,
-  validateNumber,
-  validatePercentage,
-  validateDOI,
+  commonValidations,
+  sanitizeInput,
+  formatNumber,
+  parsePercentage,
+  type ValidationRule,
   type ValidationResult
 } from './validation';
 
 // PDF Storage Utilities
 export {
-  savePDFToStorage,
-  loadPDFFromStorage,
-  removePDFFromStorage,
-  getAllPDFs,
+  storePDF,
+  getPDF,
+  getPDFsByProject,
+  deletePDF,
+  createPDFBlobURL,
+  revokePDFBlobURL,
+  getStorageSize,
   formatFileSize,
-  type PDFStorageEntry
+  type PDFMetadata,
+  type StoredPDF
 } from './pdfStorage';
 
 // Schema Parsing Utilities
 export {
   parseSchema,
-  validateAgainstSchema,
-  getSchemaField,
-  type ParsedSchema,
-  type SchemaField
+  createSourcedValue,
+  extractValue,
+  isSourcedValue,
+  type SchemaField,
+  type SchemaSection,
+  type SourcedValue
 } from './schemaParser';

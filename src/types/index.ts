@@ -6,6 +6,7 @@
  *
  * @module types
  */
+import type { ReactNode } from "react";
 
 // ==================== GEOMETRY & COORDINATES ====================
 
@@ -271,7 +272,7 @@ export interface ModalConfig {
   /** Modal title */
   title: string;
   /** Modal content (as ReactNode) */
-  content?: React.ReactNode;
+  content?: ReactNode;
   /** Callback when modal closes */
   onClose: () => void;
   /** Callback on confirm (for confirmation modals) */
