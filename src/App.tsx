@@ -29,7 +29,7 @@ import {
 import { GlobalWorkerOptions } from "pdfjs-dist";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PDFList, PDFUpload, PageNavigationButtons } from "./components";
+import { PDFList, PDFUpload, PageNavigationButtons, SearchUI } from "./components";
 import { ConfirmModal, InputModal } from "./components/Modal";
 import { SchemaForm } from "./components/SchemaForm";
 import { TemplateManager } from "./components/TemplateManager";
@@ -399,30 +399,21 @@ function PDFViewerContent({
 
   return (
     <div className="relative w-full h-full">
-      {/* Selection Tooltip with Highlight Button */}
-      <SelectionTooltip>
-        {pendingSelection && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={createHighlightFromSelection}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700 transition-colors text-sm"
-            >
-              📝 Highlight Selected Text
-            </button>
-            <button
-              onClick={() => setPendingSelection(null)}
-              className="px-3 py-2 bg-gray-600 text-white rounded-lg shadow-lg hover:bg-gray-700 transition-colors text-sm"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-      </SelectionTooltip>
-
       <Pages className="p-6 max-w-4xl mx-auto dark:invert-[94%] dark:hue-rotate-180 dark:brightness-[80%] dark:contrast-[228%]">
         <Page>
           <CanvasLayer />
           <TextLayer />
+          {/* Selection Tooltip with Highlight Button */}
+          {selectionDimensions && (
+            <SelectionTooltip>
+              <button
+                onClick={createHighlightFromSelection}
+                className="bg-white shadow-lg rounded-md px-3 py-1 hover:bg-yellow-200/70"
+              >
+                Highlight
+              </button>
+            </SelectionTooltip>
+          )}
           <AnnotationLayer />
           <HighlightLayer className="bg-yellow-300/40" />
           <CustomLayer>
@@ -671,6 +662,7 @@ export default function App() {
 
   // UI state for new Lector features
   const [showThumbnails, setShowThumbnails] = useState(true);
+  const [showSearchUI, setShowSearchUI] = useState(true);
 
   // Parse schema on mount
   useEffect(() => {
@@ -1258,106 +1250,6 @@ export default function App() {
           </span>
         </div>
 
-        {/* Enhanced Search */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold">Search</label>
-          <input
-            className="w-full border p-1 rounded text-sm"
-            placeholder="Search in PDF..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            aria-label="Search in PDF"
-            role="searchbox"
-            aria-describedby="search-description"
-          />
-          <span id="search-description" className="sr-only">
-            Search for text within the PDF document
-          </span>
-
-          {searchResultCount > 0 && (
-            <>
-              {/* Navigation Controls */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-gray-600">
-                  Match {currentSearchIndex + 1} of {searchResultCount}
-                </div>
-                <div className="flex gap-1">
-                  <button
-                    onClick={prevSearchResult}
-                    className="px-2 py-1 text-xs border rounded hover:bg-gray-100"
-                    title="Previous match"
-                    aria-label="Previous search result"
-                  >
-                    ◀
-                  </button>
-                  <button
-                    onClick={nextSearchResult}
-                    className="px-2 py-1 text-xs border rounded hover:bg-gray-100"
-                    title="Next match"
-                    aria-label="Next search result"
-                  >
-                    ▶
-                  </button>
-                </div>
-              </div>
-
-              {/* Results List */}
-              <div className="max-h-40 overflow-y-auto border rounded text-xs bg-white">
-                {searchResultsData
-                  .slice(0, 10)
-                  .map((result: SearchMatch, index: number) => (
-                    <div
-                      key={index}
-                      onClick={() => {
-                        console.log('[onClick] Search result clicked, index:', index);
-                        jumpToSearchResult(index);
-                      }}
-                      className={`p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 ${
-                        index === currentSearchIndex ? "bg-blue-100" : ""
-                      }`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Go to search result ${index + 1} on page ${
-                        result.pageNumber
-                      }`}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          jumpToSearchResult(index);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="font-medium text-blue-700">
-                          Page {result.pageNumber}
-                        </div>
-                        {(result as any).type && (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded ${
-                              (result as any).type === 'exact'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-orange-100 text-orange-700'
-                            }`}
-                          >
-                            {(result as any).type === 'exact' ? '✓ Exact' : '≈ Fuzzy'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-gray-600 truncate">
-                        {result.text?.substring(0, 60) || "Match found"}...
-                      </div>
-                    </div>
-                  ))}
-                {searchResultsData.length > 10 && (
-                  <div className="p-2 text-center text-gray-500 italic">
-                    Showing first 10 of {searchResultCount} results
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
         {/* Export */}
         <div className="space-x-2">
           <button
@@ -1384,7 +1276,7 @@ export default function App() {
           {/* PDF Viewer Grid with Optional Thumbnails - SINGLE Root wrapping everything */}
           <Root
             source={pdfSource}
-            className="flex-1 flex flex-col"
+            className="flex-1 flex"
             zoomOptions={{ minZoom: 0.5, maxZoom: 3 }}
             loader={
               <div className="flex items-center justify-center h-full">
@@ -1404,9 +1296,31 @@ export default function App() {
               info("PDF loaded successfully");
             }}
           >
+            <Search>
+              {/* Search Sidebar */}
+              {showSearchUI && (
+                <div className="w-80 border-r bg-white overflow-y-auto flex-shrink-0">
+                  <SearchUI />
+                </div>
+              )}
+              
+              {/* Main PDF Area */}
+              <div className="flex-1 flex flex-col">
             {/* Zoom Controls Bar - NOW INSIDE ROOT */}
             <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSearchUI(!showSearchUI)}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-200"
+                  title="Toggle search"
+                  aria-label={
+                    showSearchUI ? "Hide search" : "Show search"
+                  }
+                  aria-expanded={showSearchUI ? "true" : "false"}
+                >
+                  {showSearchUI ? "◀ Hide" : "▶ Show"} Search
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowThumbnails(!showThumbnails)}
@@ -1445,7 +1359,6 @@ export default function App() {
 
               {/* Main PDF Viewer */}
               <div className="overflow-y-auto h-full">
-                <Search>
                   <PDFViewerContent
                   highlights={highlights}
                   onAddHighlight={addHighlight}
@@ -1461,9 +1374,10 @@ export default function App() {
                     error(`Search failed: ${err.message || "Unknown error"}`);
                   }}
                   />
-                </Search>
               </div>
             </div>
+              </div>
+            </Search>
           </Root>
         </div>
 
