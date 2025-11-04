@@ -3,9 +3,9 @@
  * Handles storage and retrieval of PDF files using IndexedDB
  */
 
-const DB_NAME = 'LectorReviewDB';
+const DB_NAME = "LectorReviewDB";
 const DB_VERSION = 1;
-const STORE_NAME = 'pdfs';
+const STORE_NAME = "pdfs";
 
 export interface PDFMetadata {
   id: string;
@@ -26,14 +26,32 @@ function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      const error = request.error;
+      if (error?.name === "QuotaExceededError") {
+        reject(
+          new Error(
+            "Storage quota exceeded. Please free up space or delete some PDFs."
+          )
+        );
+      } else {
+        reject(
+          new Error(
+            `Failed to open database: ${error?.message || "Unknown error"}`
+          )
+        );
+      }
+    };
+
     request.onsuccess = () => resolve(request.result);
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const objectStore = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        objectStore.createIndex('projectName', 'projectName', { unique: false });
+        const objectStore = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+        objectStore.createIndex("projectName", "projectName", {
+          unique: false,
+        });
       }
     };
   });
@@ -63,12 +81,25 @@ export async function storePDF(
   };
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const transaction = db.transaction([STORE_NAME], "readwrite");
     const store = transaction.objectStore(STORE_NAME);
     const request = store.add(storedPDF);
 
     request.onsuccess = () => resolve(metadata);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      const error = request.error;
+      if (error?.name === "QuotaExceededError") {
+        reject(
+          new Error(
+            "Storage quota exceeded. Please free up space or delete some PDFs."
+          )
+        );
+      } else {
+        reject(
+          new Error(`Failed to store PDF: ${error?.message || "Unknown error"}`)
+        );
+      }
+    };
   });
 }
 
@@ -79,12 +110,19 @@ export async function getPDF(id: string): Promise<StoredPDF | null> {
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const transaction = db.transaction([STORE_NAME], "readonly");
     const store = transaction.objectStore(STORE_NAME);
     const request = store.get(id);
 
     request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      const error = request.error;
+      reject(
+        new Error(
+          `Failed to retrieve PDF: ${error?.message || "Unknown error"}`
+        )
+      );
+    };
   });
 }
 
@@ -97,9 +135,9 @@ export async function getPDFsByProject(
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const transaction = db.transaction([STORE_NAME], "readonly");
     const store = transaction.objectStore(STORE_NAME);
-    const index = store.index('projectName');
+    const index = store.index("projectName");
     const request = index.getAll(projectName);
 
     request.onsuccess = () => {
@@ -108,7 +146,14 @@ export async function getPDFsByProject(
       );
       resolve(pdfs);
     };
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      const error = request.error;
+      reject(
+        new Error(
+          `Failed to retrieve PDFs: ${error?.message || "Unknown error"}`
+        )
+      );
+    };
   });
 }
 
@@ -119,12 +164,17 @@ export async function deletePDF(id: string): Promise<void> {
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const transaction = db.transaction([STORE_NAME], "readwrite");
     const store = transaction.objectStore(STORE_NAME);
     const request = store.delete(id);
 
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      const error = request.error;
+      reject(
+        new Error(`Failed to delete PDF: ${error?.message || "Unknown error"}`)
+      );
+    };
   });
 }
 
@@ -152,7 +202,7 @@ export async function getStorageSize(): Promise<number> {
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORE_NAME], 'readonly');
+    const transaction = db.transaction([STORE_NAME], "readonly");
     const store = transaction.objectStore(STORE_NAME);
     const request = store.getAll();
 
@@ -163,7 +213,16 @@ export async function getStorageSize(): Promise<number> {
       );
       resolve(totalSize);
     };
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      const error = request.error;
+      reject(
+        new Error(
+          `Failed to calculate storage size: ${
+            error?.message || "Unknown error"
+          }`
+        )
+      );
+    };
   });
 }
 
@@ -171,11 +230,11 @@ export async function getStorageSize(): Promise<number> {
  * Format file size for display
  */
 export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
 
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
 }

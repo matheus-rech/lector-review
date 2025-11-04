@@ -3,10 +3,15 @@
  * Generates forms based on JSON schema with source traceability
  */
 
-import React, { useState } from 'react';
-import { SchemaField, SchemaSection, SourcedValue, createSourcedValue } from '../utils/schemaParser';
+import React, { useState } from "react";
+import {
+  SchemaField,
+  SchemaSection,
+  SourcedValue,
+  createSourcedValue,
+} from "../utils/schemaParser";
 
-interface SchemaFormProps {
+export interface SchemaFormProps {
   sections: SchemaSection[];
   data: Record<string, any>;
   onDataChange: (path: string, value: any) => void;
@@ -37,7 +42,7 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
     });
   };
 
-  const renderField = (field: SchemaField, parentPath: string = '') => {
+  const renderField = (field: SchemaField, parentPath: string = "") => {
     const fullPath = parentPath ? `${parentPath}.${field.id}` : field.id;
     const value = getValueByPath(data, fullPath);
 
@@ -47,9 +52,12 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
     }
 
     // Handle nested objects
-    if (field.type === 'object' && field.properties) {
+    if (field.type === "object" && field.properties) {
       return (
-        <div key={field.id} className="space-y-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+        <div
+          key={field.id}
+          className="space-y-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700"
+        >
           <label className="text-sm font-medium block">{field.label}</label>
           {field.properties.map((subField) => renderField(subField, fullPath))}
         </div>
@@ -57,7 +65,7 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
     }
 
     // Handle arrays
-    if (field.type === 'array') {
+    if (field.type === "array") {
       return renderArrayField(field, fullPath, value);
     }
 
@@ -65,8 +73,15 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
     return renderRegularField(field, fullPath, value);
   };
 
-  const renderSourcedField = (field: SchemaField, path: string, value: SourcedValue | any) => {
-    const sourcedValue = value && typeof value === 'object' && 'value' in value ? value : { value: value || '' };
+  const renderSourcedField = (
+    field: SchemaField,
+    path: string,
+    value: SourcedValue | any
+  ) => {
+    const sourcedValue =
+      value && typeof value === "object" && "value" in value
+        ? value
+        : { value: value || "" };
 
     return (
       <div key={field.id} className="space-y-1">
@@ -87,26 +102,52 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
         </div>
 
         {/* Main value input */}
-        {field.type === 'enum' && field.enum ? (
+        {field.type === "enum" && field.enum ? (
           <select
-            value={sourcedValue.value || ''}
-            onChange={(e) => onDataChange(path, createSourcedValue(e.target.value, sourcedValue.source_text, sourcedValue.source_location))}
+            value={sourcedValue.value || ""}
+            onChange={(e) =>
+              onDataChange(
+                path,
+                createSourcedValue(
+                  e.target.value,
+                  sourcedValue.source_text,
+                  sourcedValue.source_location
+                )
+              )
+            }
             className="w-full px-2 py-1 border dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800"
+            aria-label={field.label}
           >
             <option value="">Select...</option>
             {field.enum.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
             ))}
           </select>
         ) : (
           <input
-            type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
-            value={sourcedValue.value || ''}
+            type={
+              field.type === "number" || field.type === "integer"
+                ? "number"
+                : "text"
+            }
+            value={sourcedValue.value || ""}
             onChange={(e) => {
-              const val = field.type === 'number' ? parseFloat(e.target.value) : 
-                         field.type === 'integer' ? parseInt(e.target.value) : 
-                         e.target.value;
-              onDataChange(path, createSourcedValue(val, sourcedValue.source_text, sourcedValue.source_location));
+              const val =
+                field.type === "number"
+                  ? parseFloat(e.target.value)
+                  : field.type === "integer"
+                  ? parseInt(e.target.value)
+                  : e.target.value;
+              onDataChange(
+                path,
+                createSourcedValue(
+                  val,
+                  sourcedValue.source_text,
+                  sourcedValue.source_location
+                )
+              );
             }}
             placeholder={field.description}
             className="w-full px-2 py-1 border dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800"
@@ -116,8 +157,10 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
         {/* Source text */}
         <input
           type="text"
-          value={sourcedValue.source_text || ''}
-          onChange={(e) => onDataChange(path, { ...sourcedValue, source_text: e.target.value })}
+          value={sourcedValue.source_text || ""}
+          onChange={(e) =>
+            onDataChange(path, { ...sourcedValue, source_text: e.target.value })
+          }
           placeholder="Source text (exact quote)"
           className="w-full px-2 py-1 border dark:border-gray-600 rounded text-xs bg-gray-50 dark:bg-gray-700/50"
         />
@@ -125,8 +168,13 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
         {/* Source location */}
         <input
           type="text"
-          value={sourcedValue.source_location || ''}
-          onChange={(e) => onDataChange(path, { ...sourcedValue, source_location: e.target.value })}
+          value={sourcedValue.source_location || ""}
+          onChange={(e) =>
+            onDataChange(path, {
+              ...sourcedValue,
+              source_location: e.target.value,
+            })
+          }
           placeholder="Source location (e.g., Table 1, Page 4)"
           className="w-full px-2 py-1 border dark:border-gray-600 rounded text-xs bg-gray-50 dark:bg-gray-700/50"
         />
@@ -147,33 +195,44 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
           {field.label}
           {field.required && <span className="text-red-500 ml-1">*</span>}
         </label>
-        
-        {field.type === 'enum' && field.enum ? (
+
+        {field.type === "enum" && field.enum ? (
           <select
-            value={value || ''}
+            value={value || ""}
             onChange={(e) => onDataChange(path, e.target.value)}
             className="w-full px-2 py-1 border dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800"
+            aria-label={field.label}
           >
             <option value="">Select...</option>
             {field.enum.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
             ))}
           </select>
-        ) : field.type === 'boolean' ? (
+        ) : field.type === "boolean" ? (
           <input
             type="checkbox"
             checked={value || false}
             onChange={(e) => onDataChange(path, e.target.checked)}
             className="rounded"
+            aria-label={field.label}
           />
         ) : (
           <input
-            type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
-            value={value || ''}
+            type={
+              field.type === "number" || field.type === "integer"
+                ? "number"
+                : "text"
+            }
+            value={value || ""}
             onChange={(e) => {
-              const val = field.type === 'number' ? parseFloat(e.target.value) : 
-                         field.type === 'integer' ? parseInt(e.target.value) : 
-                         e.target.value;
+              const val =
+                field.type === "number"
+                  ? parseFloat(e.target.value)
+                  : field.type === "integer"
+                  ? parseInt(e.target.value)
+                  : e.target.value;
               onDataChange(path, val);
             }}
             placeholder={field.description}
@@ -192,7 +251,12 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium">{field.label}</label>
           <button
-            onClick={() => onDataChange(path, [...items, field.items?.isSourced ? createSourcedValue('') : ''])}
+            onClick={() =>
+              onDataChange(path, [
+                ...items,
+                field.items?.isSourced ? createSourcedValue("") : "",
+              ])
+            }
             className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             + Add
@@ -200,13 +264,22 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
         </div>
 
         <div className="space-y-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-          {items.map((item, index) => (
+          {items.map((_item, index) => (
             <div key={index} className="flex items-start gap-2">
               <div className="flex-1">
-                {field.items && renderField({ ...field.items, id: `${field.id}[${index}]` }, `${path}[${index}]`)}
+                {field.items &&
+                  renderField(
+                    { ...field.items, id: `${field.id}[${index}]` },
+                    `${path}[${index}]`
+                  )}
               </div>
               <button
-                onClick={() => onDataChange(path, items.filter((_, i) => i !== index))}
+                onClick={() =>
+                  onDataChange(
+                    path,
+                    items.filter((_, i) => i !== index)
+                  )
+                }
                 className="text-red-500 hover:text-red-600 text-xs"
                 title="Remove"
               >
@@ -222,7 +295,10 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
   return (
     <div className="space-y-4">
       {sections.map((section) => (
-        <div key={section.id} className="border dark:border-gray-700 rounded-lg overflow-hidden">
+        <div
+          key={section.id}
+          className="border dark:border-gray-700 rounded-lg overflow-hidden"
+        >
           <button
             onClick={() => toggleSection(section.id)}
             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between text-left"
@@ -230,16 +306,25 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
             <div>
               <h3 className="font-semibold text-sm">{section.title}</h3>
               {section.description && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{section.description}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {section.description}
+                </p>
               )}
             </div>
             <svg
-              className={`w-5 h-5 transition-transform ${expandedSections.has(section.id) ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 transition-transform ${
+                expandedSections.has(section.id) ? "rotate-180" : ""
+              }`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </button>
 
@@ -258,7 +343,12 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
  * Get value by path (e.g., "I_StudyMetadataAndIdentification.studyID")
  */
 function getValueByPath(obj: any, path: string): any {
-  const parts = path.split('.');
+  if (!obj) return undefined;
+  if (Object.prototype.hasOwnProperty.call(obj, path)) {
+    return obj[path];
+  }
+
+  const parts = path.split(".");
   let current = obj;
 
   for (const part of parts) {

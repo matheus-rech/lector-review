@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from "react";
 
-interface ModalProps {
+export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
@@ -8,7 +8,7 @@ interface ModalProps {
   onConfirm?: () => void;
   confirmText?: string;
   cancelText?: string;
-  type?: 'info' | 'warning' | 'danger';
+  type?: "info" | "warning" | "danger";
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -17,18 +17,18 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children,
   onConfirm,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
-  type = 'info',
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  type = "info",
 }) => {
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
@@ -36,95 +36,44 @@ export const Modal: React.FC<ModalProps> = ({
 
   const getConfirmButtonColor = () => {
     switch (type) {
-      case 'danger': return '#ef4444';
-      case 'warning': return '#f59e0b';
-      default: return '#3b82f6';
+      case "danger":
+        return "bg-red-500 hover:bg-red-600";
+      case "warning":
+        return "bg-amber-500 hover:bg-amber-600";
+      default:
+        return "bg-blue-500 hover:bg-blue-600";
     }
   };
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        animation: 'fadeIn 0.2s ease-out',
-      }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] animate-[fadeIn_0.2s_ease-out]"
       onClick={onClose}
     >
       <div
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          padding: '24px',
-          maxWidth: '500px',
-          width: '90%',
-          maxHeight: '80vh',
-          overflow: 'auto',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-          animation: 'scaleIn 0.2s ease-out',
-        }}
+        className="bg-white rounded-xl p-6 max-w-[500px] w-[90%] max-h-[80vh] overflow-auto shadow-xl animate-[scaleIn_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+        <h2 className="m-0 mb-4 text-xl font-semibold text-gray-900">
           {title}
         </h2>
-        <div style={{ marginBottom: '24px', color: '#4b5563', fontSize: '14px' }}>
-          {children}
-        </div>
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+        <div className="mb-6 text-gray-600 text-sm">{children}</div>
+        <div className="flex gap-3 justify-end">
           <button
+            type="button"
             onClick={onClose}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: '1px solid #d1d5db',
-              backgroundColor: 'white',
-              color: '#374151',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = '#f9fafb';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = 'white';
-            }}
+            className="px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 cursor-pointer text-sm font-medium transition-all hover:bg-gray-50"
           >
             {cancelText}
           </button>
           {onConfirm && (
             <button
+              type="button"
               onClick={() => {
                 onConfirm();
                 onClose();
               }}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: getConfirmButtonColor(),
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '500',
-                transition: 'all 0.2s',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.opacity = '0.9';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.opacity = '1';
-              }}
+              className={`px-4 py-2 rounded-md border-none text-white cursor-pointer text-sm font-medium transition-all ${getConfirmButtonColor()}`}
             >
               {confirmText}
             </button>
@@ -169,10 +118,10 @@ export const InputModal: React.FC<InputModalProps> = ({
   title,
   message,
   onConfirm,
-  placeholder = '',
-  defaultValue = '',
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  placeholder = "",
+  defaultValue = "",
+  confirmText = "Confirm",
+  cancelText = "Cancel",
 }) => {
   const [value, setValue] = useState(defaultValue);
 
@@ -198,35 +147,21 @@ export const InputModal: React.FC<InputModalProps> = ({
       confirmText={confirmText}
       cancelText={cancelText}
     >
-      <p style={{ marginBottom: '16px' }}>{message}</p>
+      <p className="mb-4">{message}</p>
       <input
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             handleConfirm();
-          } else if (e.key === 'Escape') {
+          } else if (e.key === "Escape") {
             onClose();
           }
         }}
         autoFocus
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          borderRadius: '6px',
-          border: '1px solid #d1d5db',
-          fontSize: '14px',
-          outline: 'none',
-          transition: 'border-color 0.2s',
-        }}
-        onFocus={(e) => {
-          e.currentTarget.style.borderColor = '#3b82f6';
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = '#d1d5db';
-        }}
+        className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm outline-none transition-colors focus:border-blue-500"
       />
     </Modal>
   );
@@ -240,7 +175,7 @@ interface ConfirmModalProps {
   onConfirm: () => void;
   confirmText?: string;
   cancelText?: string;
-  type?: 'info' | 'warning' | 'danger';
+  type?: "info" | "warning" | "danger";
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -249,9 +184,9 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   title,
   message,
   onConfirm,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
-  type = 'info',
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  type = "info",
 }) => {
   return (
     <Modal

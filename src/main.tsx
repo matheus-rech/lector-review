@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 
 import { GlobalWorkerOptions } from "pdfjs-dist";
@@ -14,6 +15,12 @@ GlobalWorkerOptions.workerSrc = new URL(
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error("Application error:", error, errorInfo);
+      }}
+    >
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );

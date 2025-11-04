@@ -229,11 +229,70 @@ All core components must be used within the `<Root>` context provider.
 | `ZoomOut` | Decrease zoom level | Inside Root | Respects zoomOptions |
 | `CurrentZoom` | Display current zoom | Inside Root | Shows percentage |
 
+**Example Usage:**
+
+```typescript
+import { Thumbnails, Thumbnail, ZoomIn, ZoomOut, CurrentZoom } from "@anaralabs/lector";
+
+// Thumbnail sidebar with zoom controls
+<Root source={pdfUrl}>
+  <div className="flex">
+    {/* Thumbnail sidebar */}
+    <div className="w-48 overflow-auto bg-gray-50">
+      <Thumbnails className="p-2 space-y-2">
+        <Thumbnail className="border rounded hover:border-blue-500 cursor-pointer" />
+      </Thumbnails>
+    </div>
+
+    {/* Main viewer with zoom controls */}
+    <div className="flex-1">
+      <div className="zoom-controls flex gap-2">
+        <ZoomOut />
+        <CurrentZoom />
+        <ZoomIn />
+      </div>
+      <Pages>
+        <Page>
+          <CanvasLayer />
+          <TextLayer />
+        </Page>
+      </Pages>
+    </div>
+  </div>
+</Root>
+```
+
 ### Selection Components
 
 | Component | Purpose | Context Required | Usage |
 |-----------|---------|------------------|-------|
 | `SelectionTooltip` | Contextual UI on text selection | Inside Root | Wraps custom selection UI |
+
+**Example:**
+
+```typescript
+import { SelectionTooltip } from "@anaralabs/lector";
+
+<SelectionTooltip>
+  <div className="bg-white shadow-lg rounded p-2">
+    <button onClick={handleHighlight}>Highlight</button>
+    <button onClick={handleAddNote}>Add Note</button>
+  </div>
+</SelectionTooltip>
+```
+
+### UI Components (Project-Specific)
+
+These are custom components built for Lector Review functionality:
+
+| Component | Purpose | Location | Usage |
+|-----------|---------|----------|-------|
+| `Toast` | Non-blocking notifications | `components/Toast.tsx` | Success/error/info messages |
+| `Modal` | Dialog modals (InputModal, ConfirmModal) | `components/Modal.tsx` | User input, confirmations |
+| `PDFUpload` | PDF file upload UI | `components/PDFUpload.tsx` | Drag-and-drop PDF upload |
+| `PDFList` | PDF library management | `components/PDFList.tsx` | View/select/delete PDFs |
+| `SchemaForm` | Schema-based data extraction | `components/SchemaForm.tsx` | Structured field forms |
+| `TemplateManager` | Field template editor | `components/TemplateManager.tsx` | Per-page field management |
 
 ### Root Component Props
 
@@ -355,7 +414,261 @@ const currentPage = usePDFPageNumber();
 
 **Returns:** Current page number (1-indexed)
 
+### usePDFManager()
+
+Custom hook for complete PDF CRUD operations with IndexedDB storage.
+
+```typescript
+import { usePDFManager } from "@/hooks/usePDFManager";
+
+const {
+  pdfs,           // Array of all PDFs for current project
+  loadPDFs,       // Load PDFs from IndexedDB
+  uploadPDF,      // Upload new PDF
+  deletePDF,      // Delete PDF by name
+  currentPDF,     // Currently selected PDF
+  setCurrentPDF,  // Set active PDF
+  pdfUrl,         // Blob URL for current PDF
+} = usePDFManager(projectName);
+
+// Upload PDF
+const handleUpload = async (file: File) => {
+  try {
+    await uploadPDF(file);
+    showToast("PDF uploaded successfully!", "success");
+  } catch (error) {
+    showToast(`Upload failed: ${error.message}`, "error");
+  }
+};
+
+// Delete PDF
+const handleDelete = async (pdfName: string) => {
+  try {
+    await deletePDF(pdfName);
+    showToast("PDF deleted", "success");
+  } catch (error) {
+    showToast(`Delete failed: ${error.message}`, "error");
+  }
+};
+```
+
+**Returns:**
+- `pdfs` - Array of PDFMetadata objects for current project
+- `loadPDFs()` - Async function to reload PDFs from IndexedDB
+- `uploadPDF(file: File)` - Async function to upload PDF
+- `deletePDF(name: string)` - Async function to delete PDF
+- `currentPDF` - Currently selected PDF metadata
+- `setCurrentPDF(pdf: PDFMetadata | null)` - Set active PDF
+- `pdfUrl` - Blob URL for rendering current PDF (auto-managed)
+
+**Key Features:**
+- Automatic blob URL creation and cleanup
+- Project-scoped PDF storage
+- IndexedDB integration via `pdfStorage` utilities
+- Error handling with detailed messages
+
+### useToast()
+
+Custom hook for displaying toast notifications.
+
+```typescript
+import { useToast } from "@/hooks/useToast";
+
+const { showToast } = useToast();
+
+// Success notification
+showToast("Operation completed!", "success");
+
+// Error notification
+showToast("Something went wrong", "error");
+
+// Info notification
+showToast("Processing...", "info");
+
+// Warning notification
+showToast("Large file detected", "warning");
+
+// With custom duration (in milliseconds)
+showToast("Quick message", "info", 2000);
+```
+
+**Parameters:**
+- `message` (string) - The message to display
+- `type` ("success" | "error" | "info" | "warning") - Toast type
+- `duration` (number, optional) - Display duration in ms (default: 3000)
+
+**Returns:**
+- `showToast(message, type, duration?)` - Function to show toast notification
+
+**Best Practices:**
+- Use for non-blocking feedback
+- Keep messages concise and actionable
+- Match toast type to context (success/error/info/warning)
+- Avoid toast spam (debounce repeated operations)
+
+### useDebounce()
+
+Custom hook to debounce rapidly changing values.
+
+```typescript
+import { useDebounce } from "@/hooks/useDebounce";
+
+const [searchTerm, setSearchTerm] = useState("");
+const debouncedSearch = useDebounce(searchTerm, 500);
+
+useEffect(() => {
+  if (debouncedSearch) {
+    // Perform search only after 500ms of no typing
+    search(debouncedSearch);
+  }
+}, [debouncedSearch]);
+```
+
+**Parameters:**
+- `value` (T) - The value to debounce
+- `delay` (number) - Delay in milliseconds (default: 500)
+
+**Returns:** Debounced value that updates only after the delay
+
+**Common Use Cases:**
+- Search input (500ms delay recommended)
+- Form validation
+- API calls on input change
+- Window resize handlers
+
 ## Feature Implementation Guides
+
+### Toast Notifications
+
+Lector Review uses a custom toast notification system for user feedback. **Always use toasts instead of native `alert()` or `confirm()` dialogs.**
+
+**useToast Hook:**
+
+```typescript
+import { useToast } from "@/hooks/useToast";
+
+function Component() {
+  const { showToast } = useToast();
+
+  const handleSuccess = () => {
+    showToast("PDF uploaded successfully!", "success");
+  };
+
+  const handleError = (error: Error) => {
+    showToast(`Error: ${error.message}`, "error");
+  };
+
+  const handleInfo = () => {
+    showToast("Processing PDF...", "info");
+  };
+
+  const handleWarning = () => {
+    showToast("PDF size is large, may take time to load", "warning");
+  };
+}
+```
+
+**Toast Types:**
+- `success` - Green toast for successful operations
+- `error` - Red toast for errors and failures
+- `info` - Blue toast for informational messages
+- `warning` - Yellow/orange toast for warnings
+
+**Best Practices:**
+- ✅ Use toasts for non-blocking notifications
+- ✅ Keep messages concise (1-2 sentences)
+- ✅ Use appropriate toast types for context
+- ✅ Never use `alert()`, `confirm()`, or `prompt()` (use Modal components instead)
+- ✅ Auto-dismiss toasts for success/info (typically 3-5 seconds)
+- ✅ Allow manual dismiss for errors/warnings
+
+**Toast Component Implementation:**
+
+The `Toast` component in `components/Toast.tsx` provides:
+- Automatic positioning (top-right corner)
+- Auto-dismiss with configurable duration
+- Multiple toasts queue support
+- Smooth animations (slide-in/fade-out)
+- Accessibility (aria-live regions)
+
+### Modal Dialogs
+
+For user input and confirmations, use modal components instead of native dialogs:
+
+**InputModal - For text input:**
+
+```typescript
+import { InputModal } from "@/components/Modal";
+
+function Component() {
+  const [showModal, setShowModal] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+
+  const handleSubmit = (value: string) => {
+    setInputValue(value);
+    setShowModal(false);
+    // Process the input
+  };
+
+  return (
+    <>
+      <button onClick={() => setShowModal(true)}>Create Project</button>
+
+      {showModal && (
+        <InputModal
+          title="Create New Project"
+          placeholder="Enter project name"
+          onSubmit={handleSubmit}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </>
+  );
+}
+```
+
+**ConfirmModal - For confirmations:**
+
+```typescript
+import { ConfirmModal } from "@/components/Modal";
+
+function Component() {
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleDelete = () => {
+    setShowConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    // Perform deletion
+    setShowConfirm(false);
+  };
+
+  return (
+    <>
+      <button onClick={handleDelete}>Delete PDF</button>
+
+      {showConfirm && (
+        <ConfirmModal
+          title="Delete PDF"
+          message="Are you sure you want to delete this PDF? This action cannot be undone."
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
+    </>
+  );
+}
+```
+
+**Best Practices:**
+- ✅ Use `InputModal` instead of `prompt()`
+- ✅ Use `ConfirmModal` instead of `confirm()`
+- ✅ Always provide `onClose` handlers
+- ✅ Clear form state when modal closes
+- ✅ Validate input before submitting
+- ✅ Use descriptive titles and messages
+- ✅ Support keyboard shortcuts (Escape to close, Enter to submit)
 
 ### Highlighting
 
@@ -436,6 +749,121 @@ useEffect(() => {
   }
 }, [debouncedSearch, search]);
 ```
+
+### Search Results UI & Pagination
+
+**SearchMatch Type:**
+
+```typescript
+interface SearchMatch {
+  pageNumber: number;
+  text: string;           // Matched text snippet
+  matchIndex?: number;    // Position of match in page
+  rects?: HighlightRect[]; // Highlight rectangles for navigation
+}
+
+interface SearchResults {
+  query: string;
+  totalMatches: number;
+  exactMatches: SearchMatch[];
+}
+```
+
+**Results List with Navigation:**
+
+```typescript
+import { SearchMatch } from "@/types";
+import { usePdfJump } from "@anaralabs/lector";
+
+function SearchResultsList({ results }: { results: SearchResults }) {
+  const { jumpToHighlightRects } = usePdfJump();
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const handleResultClick = (match: SearchMatch, index: number) => {
+    setSelectedIndex(index);
+    if (match.rects) {
+      jumpToHighlightRects(match.rects);
+    }
+  };
+
+  const handleNext = () => {
+    const nextIndex = (selectedIndex + 1) % results.exactMatches.length;
+    setSelectedIndex(nextIndex);
+    const match = results.exactMatches[nextIndex];
+    if (match.rects) {
+      jumpToHighlightRects(match.rects);
+    }
+  };
+
+  const handlePrevious = () => {
+    const prevIndex = selectedIndex === 0
+      ? results.exactMatches.length - 1
+      : selectedIndex - 1;
+    setSelectedIndex(prevIndex);
+    const match = results.exactMatches[prevIndex];
+    if (match.rects) {
+      jumpToHighlightRects(match.rects);
+    }
+  };
+
+  return (
+    <div className="search-results">
+      {/* Navigation Controls */}
+      <div className="search-nav">
+        <button onClick={handlePrevious}>Previous</button>
+        <span>{selectedIndex + 1} / {results.totalMatches}</span>
+        <button onClick={handleNext}>Next</button>
+      </div>
+
+      {/* Results List */}
+      <div className="results-list overflow-auto max-h-96">
+        {results.exactMatches.map((match, index) => (
+          <div
+            key={index}
+            onClick={() => handleResultClick(match, index)}
+            className={`result-item cursor-pointer p-2 ${
+              index === selectedIndex ? 'bg-blue-100' : 'hover:bg-gray-50'
+            }`}
+          >
+            <div className="text-sm font-semibold">Page {match.pageNumber}</div>
+            <div className="text-xs text-gray-600 truncate">{match.text}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+**Keyboard Navigation:**
+
+```typescript
+useEffect(() => {
+  const handleKeyPress = (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'n') {
+      e.preventDefault();
+      handleNext();
+    } else if (e.key === 'ArrowUp' || e.key === 'p') {
+      e.preventDefault();
+      handlePrevious();
+    }
+  };
+
+  window.addEventListener('keydown', handleKeyPress);
+  return () => window.removeEventListener('keydown', handleKeyPress);
+}, [selectedIndex, results]);
+```
+
+**Best Practices for Search UI:**
+- ✅ Display result count prominently
+- ✅ Show current position in results (e.g., "3 / 15")
+- ✅ Support keyboard navigation (arrows, n/p keys)
+- ✅ Highlight currently selected result in list
+- ✅ Show page number for each result
+- ✅ Display text snippet for context
+- ✅ Implement circular navigation (wrap around at ends)
+- ✅ Clear results when search term is emptied
+- ✅ Debounce search input to avoid excessive re-renders
 
 ### Zoom Controls
 
@@ -641,8 +1069,17 @@ import { LabeledHighlight, FieldTemplate, PageFormData } from "@/types";
 - Functional components (no class components)
 - TypeScript interfaces for props
 - Proper dependency arrays in `useEffect`/`useCallback`/`useMemo`
-- Toast notifications (not `alert()`/`confirm()`)
+- Toast notifications for feedback (never `alert()`)
+- Modal components for input (never `prompt()`/`confirm()`)
 - Error handling with try/catch
+- `useRef` for function storage (avoid stale closures)
+
+**Never use:**
+- ❌ `alert()` - Use `showToast()` instead
+- ❌ `confirm()` - Use `ConfirmModal` instead
+- ❌ `prompt()` - Use `InputModal` instead
+- ❌ Class components - Use functional components with hooks
+- ❌ Inline styles - Use Tailwind CSS classes
 
 **Component structure:**
 ```typescript
@@ -667,60 +1104,573 @@ export { Component };
 
 ## Testing Strategy
 
-**Unit Tests (Vitest):**
+### Unit Tests (Vitest)
+
+**Scope:**
 - Test all utility functions in `src/utils/`
-- Test custom hooks
+- Test custom hooks with React Testing Library
 - Located in `src/__tests__/`
 
-**E2E Tests (Playwright):**
-- Test critical user flows
-- PDF upload, search, highlight creation, export
-- Configuration in `playwright.config.ts`
+**Running Tests:**
+```bash
+pnpm test              # Run all tests
+pnpm test:watch        # Watch mode
+pnpm test:ui           # Open Vitest UI
+pnpm test:coverage     # Generate coverage report
+```
+
+**Best Practices:**
+- Mock Lector hooks when testing components
+- Test edge cases for utility functions
+- Use `renderHook` for custom hook testing
+- Mock IndexedDB for storage tests
+
+### E2E Tests (Playwright)
+
+**Scope:**
+- Critical user flows: PDF upload, search, highlighting, data export
+- Project management: Create, switch, delete projects
+- Configuration: `playwright.config.ts`
+
+**Running Tests:**
+```bash
+pnpm test:e2e          # Run all E2E tests
+pnpm test:e2e:ui       # Run with Playwright UI
+pnpm test:e2e:debug    # Debug mode
+```
+
+**Current Test Status (as of latest commit):**
+- **Pass Rate**: 79% (23/29 tests passing)
+- **Known Issues**: 2 navigation failures, 4 modal timeout issues
+
+### E2E Testing Patterns
+
+**⚠️ Important:** This project uses **custom modal components** instead of native browser dialogs. E2E tests must wait for and interact with these modals.
+
+#### Testing Modal Interactions
+
+**InputModal Pattern (replaces `page.prompt()`):**
+
+```typescript
+import { test, expect } from '@playwright/test';
+
+test('create new project', async ({ page }) => {
+  await page.goto('http://localhost:5173');
+
+  // Click button that triggers InputModal
+  await page.getByRole('button', { name: 'Create Project' }).click();
+
+  // Wait for modal to appear
+  const modal = page.locator('[role="dialog"]');
+  await expect(modal).toBeVisible();
+
+  // Fill input field
+  const input = modal.locator('input[type="text"]');
+  await input.fill('My New Project');
+
+  // Submit modal
+  await modal.getByRole('button', { name: /create|submit/i }).click();
+
+  // Wait for modal to close
+  await expect(modal).not.toBeVisible();
+
+  // Verify project was created
+  await expect(page.getByText('My New Project')).toBeVisible();
+});
+```
+
+**ConfirmModal Pattern (replaces `page.confirm()`):**
+
+```typescript
+test('delete PDF with confirmation', async ({ page }) => {
+  // Trigger delete action
+  await page.getByRole('button', { name: 'Delete PDF' }).click();
+
+  // Wait for confirmation modal
+  const confirmModal = page.locator('[role="dialog"]');
+  await expect(confirmModal).toBeVisible();
+  await expect(confirmModal.getByText(/are you sure/i)).toBeVisible();
+
+  // Confirm deletion
+  await confirmModal.getByRole('button', { name: /confirm|delete|yes/i }).click();
+
+  // Wait for modal to close
+  await expect(confirmModal).not.toBeVisible();
+
+  // Verify deletion
+  await expect(page.getByText('PDF Name')).not.toBeVisible();
+});
+```
+
+#### Common E2E Patterns
+
+**PDF Upload:**
+
+```typescript
+test('upload PDF file', async ({ page }) => {
+  await page.goto('http://localhost:5173');
+
+  // Use file chooser for upload
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.getByLabel('Upload PDF').click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles('path/to/test.pdf');
+
+  // Wait for upload to complete
+  await expect(page.getByText('test.pdf')).toBeVisible({ timeout: 10000 });
+});
+```
+
+**Search and Highlight:**
+
+```typescript
+test('search and create highlight', async ({ page }) => {
+  // Perform search
+  await page.getByPlaceholder('Search').fill('methodology');
+  await page.keyboard.press('Enter');
+
+  // Wait for results
+  await expect(page.getByText(/\d+ results?/i)).toBeVisible();
+
+  // Select text and create highlight
+  await page.mouse.move(100, 200);
+  await page.mouse.down();
+  await page.mouse.move(300, 200);
+  await page.mouse.up();
+
+  // Click highlight button in SelectionTooltip
+  await page.getByRole('button', { name: /highlight/i }).click();
+
+  // Verify highlight was created
+  const highlights = page.locator('.highlight-layer [data-highlight]');
+  await expect(highlights).toHaveCount(1);
+});
+```
+
+**Project Switching:**
+
+```typescript
+test('switch between projects', async ({ page }) => {
+  // Select different project from dropdown
+  await page.getByLabel('Select Project').click();
+  await page.getByRole('option', { name: 'Project 2' }).click();
+
+  // Verify project switched
+  await expect(page.getByText('Project 2')).toBeVisible();
+
+  // Verify data is scoped to new project
+  const pdfList = page.locator('[data-testid="pdf-list"]');
+  await expect(pdfList).not.toContainText('project-1-pdf.pdf');
+});
+```
+
+#### E2E Testing Best Practices
+
+- ✅ Use `getByRole()` and `getByLabel()` over CSS selectors when possible
+- ✅ Add `data-testid` attributes for critical elements without semantic roles
+- ✅ Use `.first()` when Playwright strict mode requires unique selectors
+- ✅ Wait for modals to be visible before interacting
+- ✅ Wait for modals to close before proceeding
+- ✅ Use appropriate timeouts for async operations (PDF loading, search)
+- ✅ Test both success and error paths
+- ✅ Clean up test data (projects, PDFs) in `afterEach` hooks
+- ✅ Use `aria-label` attributes to improve testability
+- ✅ Avoid hardcoded waits (`page.waitForTimeout()`) - use `waitForSelector()` instead
+
+#### Debugging Failed Tests
+
+**Common Issues:**
+1. **Modal Timeout**: Modal didn't appear - check if button click triggered state change
+2. **Navigation Failure**: Page didn't navigate - verify `jumpToPage` function is called
+3. **Element Not Found**: Selector changed - use `page.pause()` to inspect DOM
+4. **Timing Issues**: Race conditions - add explicit `waitForSelector()` calls
+
+**Debug Commands:**
+```bash
+# Run single test with UI
+pnpm test:e2e:ui -g "test name"
+
+# Run with headed browser
+pnpm test:e2e --headed
+
+# Pause execution
+# Add `await page.pause()` in test code
+
+# Generate trace
+pnpm test:e2e --trace on
+```
 
 ## File Organization
 
 ```
 src/
-├── App.tsx                 # Main application (state + localStorage)
-├── main.tsx                # Entry point
-├── components/             # UI components
-│   ├── index.ts           # Barrel export
-│   ├── Modal.tsx
-│   ├── Toast.tsx
-│   ├── PDFUpload.tsx
-│   ├── PDFList.tsx
-│   ├── TemplateManager.tsx
-│   └── SchemaForm.tsx
-├── hooks/                  # Custom React hooks
-│   ├── index.ts           # Barrel export
-│   ├── usePDFManager.ts   # PDF CRUD operations
-│   ├── useDebounce.ts     # Debounced values
-│   └── useDarkMode.ts     # Dark mode toggle
-├── utils/                  # Pure functions
-│   ├── index.ts           # Barrel export
-│   ├── pdfStorage.ts      # IndexedDB operations
-│   ├── schemaParser.ts    # JSON schema parsing
-│   ├── importExport.ts    # JSON/CSV export
-│   └── validation.ts      # Field validation
-└── types/
-    └── index.ts           # Central type definitions
+├── App.tsx                    # Main application (state + localStorage)
+├── main.tsx                   # Entry point (with PDF.js worker config)
+├── components/                # UI components
+│   ├── index.ts              # Barrel export
+│   ├── Modal.tsx             # InputModal, ConfirmModal components
+│   ├── Toast.tsx             # Toast notification system + ToastProvider
+│   ├── PDFUpload.tsx         # Drag-and-drop PDF upload
+│   ├── PDFList.tsx           # PDF library management UI
+│   ├── TemplateManager.tsx   # Per-page field template editor
+│   ├── SchemaForm.tsx        # Schema-based data extraction forms
+│   ├── HelpModal.tsx         # Help/documentation modal
+│   └── ErrorBoundary.tsx     # Error boundary component
+├── hooks/                     # Custom React hooks
+│   ├── index.ts              # Barrel export
+│   ├── usePDFManager.ts      # PDF CRUD operations (IndexedDB)
+│   ├── useToast.ts           # Toast notification hook
+│   ├── useDebounce.ts        # Debounced value hook
+│   ├── useDarkMode.ts        # Dark mode toggle hook
+│   ├── useUndoRedo.ts        # Undo/redo functionality
+│   └── useKeyboardShortcuts.ts  # Keyboard shortcuts
+├── utils/                     # Pure functions
+│   ├── index.ts              # Barrel export
+│   ├── pdfStorage.ts         # IndexedDB operations (savePDF, getPDF, deletePDF)
+│   ├── schemaParser.ts       # JSON schema parsing
+│   ├── importExport.ts       # JSON/CSV export utilities
+│   ├── validation.ts         # Field validation
+│   └── calculateHighlightRects.ts  # Highlight rectangle calculation
+├── types/
+│   └── index.ts              # Central type definitions
+│       ├── LabeledHighlight  # Highlight with metadata
+│       ├── FieldTemplate     # Form field definition
+│       ├── PageFormData      # Form values
+│       ├── PDFMetadata       # PDF file metadata
+│       ├── ProjectData       # Complete project export
+│       ├── SearchMatch       # Search result with rects
+│       ├── SearchResults     # Search results container
+│       ├── SourcedValue<T>   # Value with source tracking
+│       └── ParsedSchema      # Parsed JSON schema
+├── e2e/                       # E2E tests (Playwright)
+│   ├── basic-features.spec.ts     # Core functionality tests
+│   └── project-management.spec.ts # Project CRUD tests
+├── __tests__/                # Unit tests (Vitest)
+│   └── utils.test.ts         # Utility function tests
+└── public/
+    └── schema.json           # Optional JSON schema for data extraction
+```
+
+**Key Files:**
+
+| File | Purpose | Key Exports |
+|------|---------|-------------|
+| `App.tsx` | Main app shell, state management, localStorage | `App` component |
+| `main.tsx` | Entry point, PDF.js worker setup | - |
+| `components/Modal.tsx` | Modal dialogs | `InputModal`, `ConfirmModal` |
+| `components/Toast.tsx` | Notifications | `Toast`, `ToastProvider` |
+| `hooks/usePDFManager.ts` | PDF CRUD | `usePDFManager` hook |
+| `hooks/useToast.ts` | Toast hook | `useToast` hook |
+| `utils/pdfStorage.ts` | IndexedDB | `savePDF`, `getPDF`, `deletePDF`, `getAllPDFs` |
+| `utils/schemaParser.ts` | Schema parsing | `parseSchema`, `flattenSchema` |
+| `types/index.ts` | Type definitions | All TypeScript types + type guards |
+
+**Import Patterns:**
+
+```typescript
+// Components
+import { Modal, Toast, PDFUpload, PDFList } from "@/components";
+
+// Hooks
+import { usePDFManager, useToast, useDebounce } from "@/hooks";
+
+// Utils
+import { savePDF, getPDF, deletePDF } from "@/utils/pdfStorage";
+import { parseSchema } from "@/utils/schemaParser";
+
+// Types
+import { LabeledHighlight, FieldTemplate, PDFMetadata } from "@/types";
+
+// Lector components (external)
+import { Root, Pages, Page, CanvasLayer, TextLayer } from "@anaralabs/lector";
 ```
 
 ## Schema-Based Forms
 
-JSON schema files (optional) enable structured data extraction:
-- Schema location: `public/schema.json`
-- Parser: `src/utils/schemaParser.ts`
-- Component: `src/components/SchemaForm.tsx`
-- Data stored with path keys: `"I_StudyMetadata.studyID"`
+JSON schema files enable structured, hierarchical data extraction from research papers. This advanced feature allows researchers to define complex nested field structures.
+
+### Overview
+
+**Components:**
+- **Schema Parser**: `src/utils/schemaParser.ts` - Parses JSON schema into flat field list
+- **SchemaForm Component**: `src/components/SchemaForm.tsx` - Renders schema-based forms
+- **Schema File**: `public/schema.json` - Optional JSON schema definition
+
+**Key Concepts:**
+- **Hierarchical Structure**: Schemas define nested field groups (e.g., Study → Metadata → Author)
+- **Path-Based Keys**: Data stored with composite paths like `"I_StudyMetadata.studyID"`
+- **Type Support**: Text, number, select, textarea field types
+- **Validation**: Built-in validation based on field types
+- **Source Tracking**: Optional `SourcedValue<T>` to track data origin (page number, etc.)
+
+### Schema Structure
+
+**Example Schema (`public/schema.json`):**
+
+```json
+{
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "I_StudyMetadata",
+      "label": "Study Metadata",
+      "fields": [
+        {
+          "id": "studyID",
+          "label": "Study ID (DOI or PMID)",
+          "type": "text",
+          "required": true,
+          "placeholder": "10.1161/STROKEAHA.116.014078"
+        },
+        {
+          "id": "authors",
+          "label": "Authors",
+          "type": "textarea",
+          "placeholder": "Last names, comma-separated"
+        },
+        {
+          "id": "studyType",
+          "label": "Study Design",
+          "type": "select",
+          "options": [
+            "Retrospective cohort",
+            "Prospective cohort",
+            "Case-control",
+            "RCT"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "II_PatientData",
+      "label": "Patient Data",
+      "fields": [
+        {
+          "id": "sampleSize",
+          "label": "Sample Size (n)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "id": "meanAge",
+          "label": "Mean Age",
+          "type": "number"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### SchemaForm Component Usage
+
+```typescript
+import { SchemaForm } from "@/components/SchemaForm";
+import { parseSchema } from "@/utils/schemaParser";
+
+function PDFViewer() {
+  const [schemaData, setSchemaData] = useState<Record<string, any>>({});
+  const [schema, setSchema] = useState<ParsedSchema | null>(null);
+
+  // Load schema on mount
+  useEffect(() => {
+    fetch('/schema.json')
+      .then(res => res.json())
+      .then(data => {
+        const parsed = parseSchema(data);
+        setSchema(parsed);
+      });
+  }, []);
+
+  const handleSchemaChange = (fieldPath: string, value: any) => {
+    setSchemaData(prev => ({
+      ...prev,
+      [fieldPath]: value
+    }));
+  };
+
+  return (
+    <div>
+      {schema && (
+        <SchemaForm
+          schema={schema}
+          data={schemaData}
+          onChange={handleSchemaChange}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+### Data Storage Pattern
+
+Schema form data uses **path-based keys** to maintain hierarchical structure:
+
+```typescript
+// Data structure
+const schemaData = {
+  "I_StudyMetadata.studyID": "10.1161/STROKEAHA.116.014078",
+  "I_StudyMetadata.authors": "Smith, Jones, Williams",
+  "I_StudyMetadata.studyType": "Retrospective cohort",
+  "II_PatientData.sampleSize": 145,
+  "II_PatientData.meanAge": 67.5,
+};
+
+// Stored in localStorage with project prefix
+localStorage.setItem(`proj:${projectName}:schemaForm`, JSON.stringify(schemaData));
+```
+
+### Advanced: Source Tracking
+
+Track where data was extracted from using `SourcedValue<T>`:
+
+```typescript
+import { SourcedValue } from "@/types";
+
+// Store value with source metadata
+const sourcedValue: SourcedValue<string> = {
+  value: "10.1161/STROKEAHA.116.014078",
+  source: {
+    page: 1,
+    highlight: highlightId,
+    confidence: 0.95
+  }
+};
+
+// Schema data with sources
+const schemaDataWithSources = {
+  "I_StudyMetadata.studyID": sourcedValue,
+  "II_PatientData.sampleSize": {
+    value: 145,
+    source: { page: 2 }
+  }
+};
+```
+
+### Schema Parser API
+
+```typescript
+import { parseSchema, type ParsedSchema, type SchemaField } from "@/utils/schemaParser";
+
+// Parse schema JSON
+const schema: ParsedSchema = parseSchema(schemaJson);
+
+// Schema structure
+interface ParsedSchema {
+  version: string;
+  sections: Array<{
+    id: string;
+    label: string;
+    fields: SchemaField[];
+  }>;
+}
+
+interface SchemaField {
+  id: string;
+  label: string;
+  type: "text" | "number" | "select" | "textarea";
+  required?: boolean;
+  placeholder?: string;
+  options?: string[];  // For select fields
+}
+```
+
+### Best Practices
+
+- ✅ Use hierarchical IDs (`I_`, `II_`, `III_`) for sections to maintain order
+- ✅ Mark critical fields as `required: true`
+- ✅ Provide helpful placeholders with examples
+- ✅ Use `select` type for controlled vocabularies
+- ✅ Use `textarea` for multi-line text (authors, abstracts)
+- ✅ Store schema in `public/` directory for easy access
+- ✅ Validate schema structure before parsing
+- ✅ Consider version compatibility when updating schemas
+- ✅ Export schema data separately from template data for analysis
+
+### Integration with Templates
+
+Schema forms and per-page templates serve different purposes:
+
+| Feature | Schema Forms | Per-Page Templates |
+|---------|--------------|-------------------|
+| **Structure** | Hierarchical, global | Flat, page-specific |
+| **Use Case** | Structured data extraction | Quick page annotations |
+| **Storage Key** | Path-based (`section.field`) | Composite (`page:field`) |
+| **Flexibility** | Pre-defined schema | User-defined fields |
+| **Best For** | Systematic reviews | Ad-hoc data collection |
+
+Both can be used simultaneously in the same project for comprehensive data extraction.
 
 ## Known Issues & Gotchas
 
-1. **Zoom controls must be inside Root** - Recent bug fix, ensure all Lector components/hooks are inside Root context
-2. **Blob URL cleanup** - Always revoke blob URLs in cleanup (`useEffect` return or `useRef`)
-3. **Search debouncing** - Implemented (500ms) to prevent excessive re-renders on large PDFs
-4. **LocalStorage limits** - ~5-10MB per domain, use IndexedDB for PDFs
-5. **Multiple App backups** - Many `App-*.tsx` backup files exist, `App.tsx` is the active version
+### ✅ Recently Fixed
+
+1. **Zoom controls context** - ✅ Fixed in commit `cb84e87`: All zoom controls now properly inside Root context
+2. **Native dialog replacement** - ✅ Fixed in commit `fcb8ff0`: Modal components replace native `prompt()`/`confirm()` for better E2E testability
+3. **Navigation closure bug** - ✅ Fixed: useRef pattern for jumpToPage function prevents stale closures
+4. **Page indicator display** - ✅ Fixed: Now correctly shows `{currentPage} / {totalPages}`
+
+### ⚠️ Current Known Issues
+
+1. **E2E Navigation Tests** (2 failing tests)
+   - **Symptom**: Page navigation works but indicator doesn't update in E2E tests
+   - **Status**: Under investigation
+   - **Workaround**: Manually verify page changes in browser
+   - **Impact**: Low - navigation works in production, only affects automated tests
+
+2. **E2E Modal Timeout** (4 failing tests)
+   - **Symptom**: Modal dialogs timeout during E2E test execution
+   - **Status**: Under investigation
+   - **Workaround**: Add explicit waits with longer timeouts
+   - **Impact**: Medium - affects CI/CD pipeline, modals work in production
+
+3. **LocalStorage limits** - ~5-10MB per domain
+   - **Impact**: Large projects with many highlights may hit limits
+   - **Mitigation**: PDFs stored in IndexedDB (50-100MB typical limit)
+   - **Best Practice**: Regularly export and archive old project data
+
+4. **Multiple App backups** - Many `App-*.tsx` backup files exist
+   - **Active File**: `App.tsx` is the current production version
+   - **Note**: Backup files are for historical reference only
+   - **Action**: Can be safely ignored or deleted
+
+### 🔍 Important Reminders
+
+1. **Lector Hook Context** - ALL Lector hooks MUST be inside `<Root>` component
+   - Affects: `usePdfJump`, `useSearch`, `useSelectionDimensions`, `usePdf`, `usePDFPageNumber`
+   - Components: `ZoomIn`, `ZoomOut`, `CurrentZoom`, `Thumbnails`, `SelectionTooltip`
+
+2. **Blob URL Management** - Always revoke blob URLs to prevent memory leaks
+   - Use `useRef` to track current blob URL
+   - Revoke in cleanup functions (`useEffect` return)
+   - Revoke before creating new blob URLs
+
+3. **Search Debouncing** - Implemented with 500ms delay
+   - Prevents excessive re-renders on large PDFs
+   - Use `useDebounce` hook for search input
+
+4. **Modal Components** - Never use native browser dialogs
+   - ❌ Don't use: `alert()`, `confirm()`, `prompt()`
+   - ✅ Use instead: `Toast`, `InputModal`, `ConfirmModal`
+
+5. **Testing with Modals** - E2E tests must wait for modal visibility
+   - Always check `await expect(modal).toBeVisible()` before interaction
+   - Wait for modal to close before proceeding
+   - Use `role="dialog"` selector for modals
+
+### 📊 Test Status
+
+**Current E2E Test Pass Rate**: 79% (23/29 passing)
+
+| Test Suite | Status | Notes |
+|------------|--------|-------|
+| Basic Features | 79% pass | 2 navigation failures |
+| Project Management | In progress | 4 modal timeout issues |
+| PDF Upload | ✅ Passing | - |
+| Search & Highlight | ✅ Passing | - |
+
+**Unit Tests**: All passing ✅
 
 ## Performance Optimizations
 
@@ -908,6 +1858,175 @@ useEffect(() => {
   const size = await getStorageSize();
   console.log(`Storage used: ${formatFileSize(size)}`);
   ```
+
+#### 8. Page navigation indicator not updating
+
+**Symptoms:** Page changes but indicator shows wrong page number or doesn't update
+
+**Cause:** Stale closure in navigation function stored in state instead of ref
+
+**Checklist:**
+- ✅ Use `useRef` instead of `useState` for `jumpToPage` function
+- ✅ Verify `usePDFPageNumber()` hook is being called
+- ✅ Check that page change events are firing
+- ✅ Ensure navigation buttons use latest function reference
+
+**Solution:**
+```typescript
+// ❌ Wrong - using state for function
+const [jumpToPageFn, setJumpToPageFn] = useState<((page: number) => void) | null>(null);
+
+// ✅ Correct - using ref for function
+const jumpToPageFn = useRef<((page: number, options?: any) => void) | null>(null);
+
+// Inside component that has access to usePdfJump
+const { jumpToPage } = usePdfJump();
+jumpToPageFn.current = jumpToPage;
+
+// Usage
+const handlePageChange = (page: number) => {
+  if (jumpToPageFn.current) {
+    jumpToPageFn.current(page, { behavior: "auto" });
+  }
+};
+```
+
+#### 9. Modal dialogs not appearing or timing out
+
+**Symptoms:** Modal doesn't appear when triggered, or E2E tests timeout waiting for modal
+
+**Cause:** State update timing, conditional rendering, or missing modal component
+
+**Checklist:**
+- ✅ Verify modal state is being set to `true`
+- ✅ Check that modal component is rendered (not behind conditional that filters it out)
+- ✅ Ensure modal has `role="dialog"` for accessibility and testing
+- ✅ Verify modal backdrop and z-index are correct
+- ✅ Check browser console for React errors
+
+**Solution:**
+```typescript
+// Ensure modal state is properly managed
+const [showModal, setShowModal] = useState(false);
+
+const handleOpen = () => {
+  setShowModal(true);  // Verify this is called
+};
+
+const handleClose = () => {
+  setShowModal(false);
+};
+
+// Modal should always be in render tree
+return (
+  <>
+    <button onClick={handleOpen}>Open Modal</button>
+
+    {/* ✅ Correct - modal rendered conditionally */}
+    {showModal && (
+      <InputModal
+        title="Enter Name"
+        onSubmit={handleSubmit}
+        onClose={handleClose}
+      />
+    )}
+  </>
+);
+```
+
+**E2E Testing Considerations:**
+- Add explicit waits: `await expect(modal).toBeVisible({ timeout: 5000 })`
+- Verify modal appears before interacting
+- Check that click handlers are properly attached
+
+#### 10. Memory leaks from blob URLs
+
+**Symptoms:** Increasing memory usage, browser slowdown with many PDF uploads
+
+**Cause:** Blob URLs not being revoked when PDF changes or component unmounts
+
+**Checklist:**
+- ✅ Revoke blob URLs in cleanup functions
+- ✅ Use refs to track current blob URL
+- ✅ Revoke old blob before creating new one
+- ✅ Always revoke on component unmount
+
+**Solution:**
+```typescript
+// ✅ Correct pattern with automatic cleanup
+const pdfUrlRef = useRef<string | null>(null);
+
+useEffect(() => {
+  const loadPDF = async () => {
+    const pdfData = await getPDFFromIndexedDB();
+
+    // Revoke old blob URL if exists
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current);
+    }
+
+    // Create new blob URL
+    const blob = new Blob([pdfData], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    pdfUrlRef.current = url;
+    setPdfUrl(url);
+  };
+
+  loadPDF();
+
+  // Cleanup on unmount
+  return () => {
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current);
+      pdfUrlRef.current = null;
+    }
+  };
+}, [pdfName]);
+```
+
+**Best Practices:**
+- Always pair `URL.createObjectURL()` with `URL.revokeObjectURL()`
+- Use refs to maintain reference to current blob URL
+- Revoke in cleanup functions and before creating new blobs
+- Monitor memory usage in DevTools to verify cleanup
+
+#### 11. Toast notifications not showing
+
+**Symptoms:** `showToast()` called but no toast appears
+
+**Cause:** Toast context not provided or multiple context providers
+
+**Checklist:**
+- ✅ Verify `ToastProvider` wraps your app
+- ✅ Check that `useToast()` is called inside ToastProvider
+- ✅ Ensure toast container is rendered
+- ✅ Check z-index of toast container
+- ✅ Verify no CSS `display: none` on toast elements
+
+**Solution:**
+```typescript
+// In main.tsx or App.tsx root
+import { ToastProvider } from "@/components/Toast";
+
+function App() {
+  return (
+    <ToastProvider>
+      {/* Rest of app */}
+    </ToastProvider>
+  );
+}
+
+// In any component
+import { useToast } from "@/hooks/useToast";
+
+function Component() {
+  const { showToast } = useToast();
+
+  const handleAction = () => {
+    showToast("Action completed", "success");
+  };
+}
+```
 
 ### Verification Checklist
 

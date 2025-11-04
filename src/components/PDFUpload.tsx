@@ -3,17 +3,19 @@
  * Handles PDF file upload with drag-and-drop support
  */
 
-import React, { useRef, useState } from 'react';
-import { formatFileSize } from '../utils/pdfStorage';
+import React, { useRef, useState } from "react";
+import { formatFileSize } from "../utils/pdfStorage";
 
-interface PDFUploadProps {
+export interface PDFUploadProps {
   onFileSelect: (file: File) => void;
+  onError?: (message: string) => void;
   loading?: boolean;
   error?: string | null;
 }
 
 export const PDFUpload: React.FC<PDFUploadProps> = ({
   onFileSelect,
+  onError,
   loading = false,
   error = null,
 }) => {
@@ -29,15 +31,23 @@ export const PDFUpload: React.FC<PDFUploadProps> = ({
 
   const validateAndSelect = (file: File) => {
     // Validate file type
-    if (file.type !== 'application/pdf') {
-      alert('Please select a PDF file');
+    if (file.type !== "application/pdf") {
+      const errorMessage = "Please select a PDF file";
+      if (onError) {
+        onError(errorMessage);
+      }
       return;
     }
 
     // Validate file size (max 50MB)
     const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert(`File size exceeds maximum of ${formatFileSize(maxSize)}`);
+      const errorMessage = `File size exceeds maximum of ${formatFileSize(
+        maxSize
+      )}`;
+      if (onError) {
+        onError(errorMessage);
+      }
       return;
     }
 
@@ -75,15 +85,15 @@ export const PDFUpload: React.FC<PDFUploadProps> = ({
         type="file"
         accept=".pdf,application/pdf"
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        style={{ display: "none" }}
         aria-label="Upload PDF file"
       />
 
       <div
         className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
           dragging
-            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-            : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
+            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+            : "border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500"
         }`}
         onClick={handleClick}
         onDragOver={handleDragOver}
@@ -106,7 +116,7 @@ export const PDFUpload: React.FC<PDFUploadProps> = ({
           </svg>
           <div>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {loading ? 'Uploading...' : 'Click or drag PDF here'}
+              {loading ? "Uploading..." : "Click or drag PDF here"}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Maximum file size: 50MB

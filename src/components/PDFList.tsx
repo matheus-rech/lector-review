@@ -3,15 +3,16 @@
  * Displays list of uploaded PDFs with selection and deletion
  */
 
-import React from 'react';
-import { PDFWithURL } from '../hooks/usePDFManager';
-import { formatFileSize } from '../utils/pdfStorage';
+import React from "react";
+import { PDFWithURL } from "../hooks/usePDFManager";
+import { formatFileSize } from "../utils/pdfStorage";
 
-interface PDFListProps {
+export interface PDFListProps {
   pdfs: PDFWithURL[];
   currentPdfId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onDeleteConfirm?: (id: string, name: string, onConfirm: () => void) => void;
   loading?: boolean;
 }
 
@@ -20,6 +21,7 @@ export const PDFList: React.FC<PDFListProps> = ({
   currentPdfId,
   onSelect,
   onDelete,
+  onDeleteConfirm,
   loading = false,
 }) => {
   if (pdfs.length === 0) {
@@ -37,8 +39,8 @@ export const PDFList: React.FC<PDFListProps> = ({
           key={pdf.id}
           className={`flex items-center gap-2 p-2 rounded border transition-colors ${
             pdf.id === currentPdfId
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+              : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
           }`}
         >
           <button
@@ -60,10 +62,7 @@ export const PDFList: React.FC<PDFListProps> = ({
                 />
               </svg>
               <div className="flex-1 min-w-0">
-                <p
-                  className="text-xs font-medium truncate"
-                  title={pdf.name}
-                >
+                <p className="text-xs font-medium truncate" title={pdf.name}>
                   {pdf.name}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -76,11 +75,12 @@ export const PDFList: React.FC<PDFListProps> = ({
           <button
             className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
             onClick={() => {
-              if (
-                window.confirm(
-                  `Delete "${pdf.name}"? This action cannot be undone.`
-                )
-              ) {
+              if (onDeleteConfirm) {
+                onDeleteConfirm(pdf.id, pdf.name, () => {
+                  onDelete(pdf.id);
+                });
+              } else {
+                // Fallback to direct delete if no confirmation handler provided
                 onDelete(pdf.id);
               }
             }}

@@ -31,7 +31,7 @@ import { TemplateManager } from "./components/TemplateManager";
 import { Toast, useToast } from "./components/Toast";
 import { usePDFManager } from "./hooks/usePDFManager";
 import type { SearchMatch } from "./types";
-import { parseSchema } from "./utils/schemaParser";
+import { createSourcedValue, parseSchema } from "./utils/schemaParser";
 
 // Configure PDF.js worker
 GlobalWorkerOptions.workerSrc = new URL(
@@ -140,6 +140,89 @@ const defaultTemplates: Record<number, FieldTemplate[]> = {
   ],
 };
 
+const arrayPathRegex = /^(.+)\[(\d+)\]$/;
+
+const getValueAtPath = (obj: any, path: string): any => {
+  if (!obj) return undefined;
+  if (Object.prototype.hasOwnProperty.call(obj, path)) {
+    return obj[path];
+  }
+
+  const parts = path.split(".");
+  let current: any = obj;
+
+  for (const part of parts) {
+    if (current === undefined || current === null) {
+      return undefined;
+    }
+
+    const arrayMatch = part.match(arrayPathRegex);
+    if (arrayMatch) {
+      const [, key, index] = arrayMatch;
+      current = current?.[key]?.[parseInt(index, 10)];
+    } else {
+      current = current?.[part];
+    }
+  }
+
+  return current;
+};
+
+const cloneContainer = (value: any) => {
+  if (Array.isArray(value)) {
+    return [...value];
+  }
+  if (value && typeof value === "object") {
+    return { ...value };
+  }
+  return {};
+};
+
+const setValueAtPath = (
+  source: Record<string, any> | undefined,
+  path: string,
+  value: any
+): Record<string, any> => {
+  const result: Record<string, any> = { ...(source || {}) };
+  const parts = path.split(".");
+  let current: any = result;
+
+  parts.forEach((part, index) => {
+    const isLast = index === parts.length - 1;
+    const arrayMatch = part.match(arrayPathRegex);
+
+    if (arrayMatch) {
+      const [, key, idxStr] = arrayMatch;
+      const idx = parseInt(idxStr, 10);
+      const existingArray = Array.isArray(current[key])
+        ? [...current[key]]
+        : [];
+      current[key] = existingArray;
+
+      if (isLast) {
+        existingArray[idx] = value;
+        return;
+      }
+
+      const nextValue = cloneContainer(existingArray[idx]);
+      existingArray[idx] = nextValue;
+      current = nextValue;
+      return;
+    }
+
+    if (isLast) {
+      current[part] = value;
+      return;
+    }
+
+    const nextValue = cloneContainer(current[part]);
+    current[part] = nextValue;
+    current = nextValue;
+  });
+
+  return result;
+};
+
 /** ---------- PDF Viewer Component (inside Root context) ---------- */
 function PDFViewerContent({
   highlights,
@@ -151,6 +234,7 @@ function PDFViewerContent({
   onJumpToPageReady,
   onSearchResultsData,
   onRequestHighlightLabel,
+  onSearchError,
 }: {
   highlights: LabeledHighlight[];
   onAddHighlight: (rect: Rect, pageNumber: number, label: string) => void;
@@ -168,6 +252,7 @@ function PDFViewerContent({
     defaultLabel: string,
     onConfirm: (label: string) => void
   ) => void;
+  onSearchError?: (error: Error) => void;
 }) {
   // Use Lector hooks
   const selectionDimensions = useSelectionDimensions();
@@ -197,20 +282,40 @@ function PDFViewerContent({
   }, [currentPageNumber, totalPages, onPageChange]);
 
   // State for pending selection
-  const [pendingSelection, setPendingSelection] = useState<any>(null);
+  const [pendingSelection, setPendingSelection] = useState<{
+    rects: Rect[];
+    pageNumber: number;
+    text: string;
+  } | null>(null);
 
   // Perform search when searchTerm changes
   useEffect(() => {
     if (searchTerm && searchTerm.trim().length > 0) {
-      search(searchTerm);
+      try {
+        search(searchTerm);
+      } catch (err) {
+        console.error("Search error:", err);
+        if (onSearchError) {
+          onSearchError(
+            err instanceof Error ? err : new Error("Search failed")
+          );
+        }
+      }
     }
-  }, [searchTerm, search]);
+  }, [searchTerm, search, onSearchError]);
 
   // Convert search results to highlights and update count using calculateHighlightRects
   useEffect(() => {
     if (searchResults?.exactMatches && searchResults.exactMatches.length > 0) {
       onSearchResultsChange(searchResults.exactMatches.length);
-      onSearchResultsData(searchResults.exactMatches as any);
+      onSearchResultsData(
+        searchResults.exactMatches.map((match, idx) => ({
+          id: `search-${idx}-${Date.now()}`,
+          pageNumber: match.pageNumber,
+          text: match.text || "",
+          matchIndex: match.matchIndex,
+        })) as SearchMatch[]
+      );
 
       // Use calculateHighlightRects for accurate positioning
       let cancelled = false;
@@ -260,12 +365,20 @@ function PDFViewerContent({
               );
             } else {
               // Fallback to manual extraction if page proxy unavailable
-              const matchAny = match as any;
+              const matchWithRects = match as unknown as SearchMatch & {
+                rects?: Array<{
+                  x: number;
+                  y: number;
+                  width: number;
+                  height: number;
+                }>;
+                rect?: { x: number; y: number; width: number; height: number };
+              };
               const rect =
-                matchAny.rects && matchAny.rects[0]
-                  ? matchAny.rects[0]
-                  : matchAny.rect
-                  ? matchAny.rect
+                matchWithRects.rects && matchWithRects.rects[0]
+                  ? matchWithRects.rects[0]
+                  : matchWithRects.rect
+                  ? matchWithRects.rect
                   : { x: 100, y: 100, width: 200, height: 20 };
 
               searchHighlights.push({
@@ -285,13 +398,26 @@ function PDFViewerContent({
               error
             );
 
+            // Notify parent of error
+            if (onSearchError && error instanceof Error) {
+              onSearchError(error);
+            }
+
             // Fallback to manual extraction on error
-            const matchAny = match as any;
+            const matchWithRects = match as unknown as SearchMatch & {
+              rects?: Array<{
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+              }>;
+              rect?: { x: number; y: number; width: number; height: number };
+            };
             const rect =
-              matchAny.rects && matchAny.rects[0]
-                ? matchAny.rects[0]
-                : matchAny.rect
-                ? matchAny.rect
+              matchWithRects.rects && matchWithRects.rects[0]
+                ? matchWithRects.rects[0]
+                : matchWithRects.rect
+                ? matchWithRects.rect
                 : { x: 100, y: 100, width: 200, height: 20 };
 
             searchHighlights.push({
@@ -329,14 +455,29 @@ function PDFViewerContent({
     onSearchResultsChange,
     onSearchResultsData,
     onUpdateSearchHighlights,
+    onSearchError,
   ]);
 
   // Handle text selection - store pending selection
   useEffect(() => {
     const dimension = selectionDimensions.getDimension();
     if (dimension && dimension.highlights && dimension.highlights.length > 0) {
+      // Convert HighlightRect[] to Rect[]
+      const rects: Rect[] = dimension.highlights.map(
+        (hRect: {
+          left: number;
+          top: number;
+          width: number;
+          height: number;
+        }) => ({
+          x: hRect.left,
+          y: hRect.top,
+          width: hRect.width,
+          height: hRect.height,
+        })
+      );
       setPendingSelection({
-        rects: dimension.highlights,
+        rects,
         pageNumber: currentPageNumber || 1,
         text: dimension.text || "",
       });
@@ -465,16 +606,27 @@ export default function App() {
   // Load blob URL when PDF changes
   useEffect(() => {
     if (currentPdfId) {
-      getCurrentPDFUrl().then((url) => {
-        if (url) {
-          // Revoke old URL if exists
-          if (pdfBlobUrlRef.current) {
-            URL.revokeObjectURL(pdfBlobUrlRef.current);
+      getCurrentPDFUrl()
+        .then((url) => {
+          if (url) {
+            // Revoke old URL if exists
+            if (pdfBlobUrlRef.current) {
+              URL.revokeObjectURL(pdfBlobUrlRef.current);
+            }
+            setPdfBlobUrl(url);
+            pdfBlobUrlRef.current = url;
+          } else {
+            error("Failed to create PDF blob URL");
           }
-          setPdfBlobUrl(url);
-          pdfBlobUrlRef.current = url;
-        }
-      });
+        })
+        .catch((err) => {
+          console.error("Error loading PDF blob URL:", err);
+          error(
+            `Failed to load PDF: ${
+              err instanceof Error ? err.message : "Unknown error"
+            }`
+          );
+        });
     } else {
       // Clear blob URL if no PDF selected
       if (pdfBlobUrlRef.current) {
@@ -490,7 +642,7 @@ export default function App() {
         pdfBlobUrlRef.current = null;
       }
     };
-  }, [currentPdfId, getCurrentPDFUrl]);
+  }, [currentPdfId, getCurrentPDFUrl, error]);
 
   // Determine PDF source (blob URL or static URL)
   const pdfSource = pdfBlobUrl || source;
@@ -516,10 +668,12 @@ export default function App() {
   );
 
   /** Page Form Data */
-  const [pageForm, setPageForm] = useState<Record<string, string>>(() => {
+  const [pageForm, setPageForm] = useState<Record<string, any>>(() => {
     const saved = localStorage.getItem(`proj:${currentProject}:pageForm`);
     return saved ? JSON.parse(saved) : {};
   });
+  const [pendingHighlightLinkPath, setPendingHighlightLinkPath] =
+    useState<string | null>(null);
 
   /** Page Navigation - synced with PDFViewerContent */
   const [currentPage, setCurrentPage] = useState(1);
@@ -581,6 +735,21 @@ export default function App() {
     typeof parseSchema
   > | null>(null);
   const [useSchemaForm, setUseSchemaForm] = useState(false);
+
+  useEffect(() => {
+    if (!useSchemaForm) {
+      setPendingHighlightLinkPath(null);
+    }
+  }, [useSchemaForm]);
+
+  useEffect(() => {
+    if (
+      pendingHighlightLinkPath &&
+      !highlights.some((h) => h.kind === "user")
+    ) {
+      setPendingHighlightLinkPath(null);
+    }
+  }, [highlights, pendingHighlightLinkPath]);
 
   // Template Manager modal
   const [showTemplateManager, setShowTemplateManager] = useState(false);
@@ -653,6 +822,7 @@ export default function App() {
     );
     const savedForm = localStorage.getItem(`proj:${proj}:pageForm`);
     setPageForm(savedForm ? JSON.parse(savedForm) : {});
+    setPendingHighlightLinkPath(null);
     success(`Switched to project: ${proj}`);
   };
 
@@ -742,6 +912,54 @@ export default function App() {
     success("Highlight deleted");
   };
 
+  /** Link highlight to schema field */
+  const linkHighlightToField = useCallback(
+    (path: string, highlightId: string) => {
+      const highlight = highlights.find((h) => h.id === highlightId);
+
+      if (!highlight) {
+        error("Highlight not found");
+        setPendingHighlightLinkPath(null);
+        return;
+      }
+
+      if (highlight.kind !== "user") {
+        error("Only user highlights can be linked");
+        setPendingHighlightLinkPath(null);
+        return;
+      }
+
+      setPageForm((prev) => {
+        const existing = getValueAtPath(prev, path);
+        const existingValue =
+          existing && typeof existing === "object" && "value" in existing
+            ? (existing as { value: unknown }).value
+            : existing;
+
+        const normalizedValue =
+          existingValue === undefined ||
+          existingValue === null ||
+          (typeof existingValue === "string" &&
+            existingValue.trim().length === 0)
+            ? highlight.label
+            : existingValue;
+
+        const nextValue = createSourcedValue(
+          normalizedValue,
+          highlight.label,
+          `Page ${highlight.pageNumber}`,
+          highlight.id
+        );
+
+        return setValueAtPath(prev, path, nextValue);
+      });
+
+      success("Highlight linked to field");
+      setPendingHighlightLinkPath(null);
+    },
+    [highlights, error, success]
+  );
+
   /** Request highlight label - opens modal */
   const handleRequestHighlightLabel = useCallback(
     (
@@ -816,6 +1034,23 @@ export default function App() {
     }
   };
 
+  const handlePDFDeleteConfirm = (
+    _id: string,
+    name: string,
+    onConfirm: () => void
+  ) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: "Delete PDF",
+      message: `Delete "${name}"? This action cannot be undone.`,
+      type: "danger",
+      onConfirm: () => {
+        onConfirm();
+        setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
+
   /** Template input */
   const currentPageTemplate = templates[currentPage] || [];
   const handleTemplateInput = (
@@ -828,10 +1063,11 @@ export default function App() {
   };
 
   /** Schema form handler */
-  const handleSchemaDataChange = (path: string, value: any) => {
-    // For schema forms, we store data differently
-    // Use path as key (e.g., "I_StudyMetadataAndIdentification.studyID")
-    setPageForm((prev) => ({ ...prev, [path]: value }));
+  const handleSchemaDataChange = (
+    path: string,
+    value: string | number | boolean | Record<string, unknown>
+  ) => {
+    setPageForm((prev) => setValueAtPath(prev, path, value));
   };
 
   /** Template Manager handlers */
@@ -878,12 +1114,22 @@ export default function App() {
       ],
     ];
     Object.entries(pageForm).forEach(([key, value]) => {
+      if (!key.includes(":")) {
+        return;
+      }
       const [page, field] = key.split(":");
+      
+      // Extract actual value if it's a SourcedValue object
+      const actualValue =
+        value && typeof value === "object" && "value" in value
+          ? (value as { value: unknown }).value
+          : value;
+      
       rows.push([
         currentProject,
         page || "",
         field || "",
-        String(value || ""),
+        String(actualValue || ""),
         "",
         "",
       ]);
@@ -1026,6 +1272,7 @@ export default function App() {
           <label className="text-xs font-semibold">PDF Management</label>
           <PDFUpload
             onFileSelect={handlePDFUpload}
+            onError={error}
             loading={pdfLoading}
             error={null}
           />
@@ -1035,6 +1282,7 @@ export default function App() {
               currentPdfId={currentPdfId}
               onSelect={handlePDFSelect}
               onDelete={handlePDFDelete}
+              onDeleteConfirm={handlePDFDeleteConfirm}
               loading={pdfLoading}
             />
           )}
@@ -1049,7 +1297,12 @@ export default function App() {
             onChange={(e) => setSource(e.target.value)}
             placeholder="Enter PDF URL..."
             disabled={!!currentPdfId}
+            aria-label="PDF source URL"
+            aria-describedby="pdf-url-description"
           />
+          <span id="pdf-url-description" className="sr-only">
+            Enter a URL to load a PDF file. Disabled when a PDF is uploaded.
+          </span>
         </div>
 
         {/* Enhanced Search */}
@@ -1060,7 +1313,13 @@ export default function App() {
             placeholder="Search in PDF..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Search in PDF"
+            role="searchbox"
+            aria-describedby="search-description"
           />
+          <span id="search-description" className="sr-only">
+            Search for text within the PDF document
+          </span>
 
           {searchResultCount > 0 && (
             <>
@@ -1074,6 +1333,7 @@ export default function App() {
                     onClick={prevSearchResult}
                     className="px-2 py-1 text-xs border rounded hover:bg-gray-100"
                     title="Previous match"
+                    aria-label="Previous search result"
                   >
                     ◀
                   </button>
@@ -1081,6 +1341,7 @@ export default function App() {
                     onClick={nextSearchResult}
                     className="px-2 py-1 text-xs border rounded hover:bg-gray-100"
                     title="Next match"
+                    aria-label="Next search result"
                   >
                     ▶
                   </button>
@@ -1091,13 +1352,24 @@ export default function App() {
               <div className="max-h-40 overflow-y-auto border rounded text-xs bg-white">
                 {searchResultsData
                   .slice(0, 10)
-                  .map((result: any, index: number) => (
+                  .map((result: SearchMatch, index: number) => (
                     <div
                       key={index}
                       onClick={() => jumpToSearchResult(index)}
                       className={`p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 ${
                         index === currentSearchIndex ? "bg-blue-100" : ""
                       }`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Go to search result ${index + 1} on page ${
+                        result.pageNumber
+                      }`}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          jumpToSearchResult(index);
+                        }
+                      }}
                     >
                       <div className="font-medium text-blue-700">
                         Page {result.pageNumber}
@@ -1145,14 +1417,28 @@ export default function App() {
             source={pdfSource}
             className="flex-1 flex flex-col"
             zoomOptions={{ minZoom: 0.5, maxZoom: 3 }}
+            onError={(err: Error | unknown) => {
+              console.error("PDF loading error:", err);
+              const errorMessage =
+                err instanceof Error ? err.message : "Unknown error";
+              error(`Failed to load PDF: ${errorMessage}`);
+            }}
+            onLoad={() => {
+              info("PDF loaded successfully");
+            }}
           >
             {/* Zoom Controls Bar - NOW INSIDE ROOT */}
             <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => setShowThumbnails(!showThumbnails)}
                   className="px-3 py-1 text-sm border rounded hover:bg-gray-200"
                   title="Toggle thumbnails"
+                  aria-label={
+                    showThumbnails ? "Hide thumbnails" : "Show thumbnails"
+                  }
+                  aria-expanded={showThumbnails ? "true" : "false"}
                 >
                   {showThumbnails ? "◀ Hide" : "▶ Show"} Thumbnails
                 </button>
@@ -1192,6 +1478,10 @@ export default function App() {
                   onJumpToPageReady={handleJumpToPageReady}
                   onSearchResultsData={handleSearchResultsData}
                   onRequestHighlightLabel={handleRequestHighlightLabel}
+                  onSearchError={(err) => {
+                    console.error("Search error:", err);
+                    error(`Search failed: ${err.message || "Unknown error"}`);
+                  }}
                 />
               </div>
             </div>
@@ -1258,6 +1548,7 @@ export default function App() {
                 disabled={currentPage === 1}
                 className="flex-1 text-xs px-2 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Jump to first page"
+                aria-label="Jump to first page"
               >
                 First
               </button>
@@ -1266,6 +1557,7 @@ export default function App() {
                 disabled={currentPage === totalPages}
                 className="flex-1 text-xs px-2 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Jump to last page"
+                aria-label="Jump to last page"
               >
                 Last
               </button>
@@ -1279,6 +1571,8 @@ export default function App() {
                 !useSchemaForm ? "bg-blue-500 text-white" : "bg-gray-100"
               }`}
               onClick={() => setUseSchemaForm(false)}
+              aria-label="Switch to Template Form"
+              aria-pressed={!useSchemaForm ? "true" : "false"}
             >
               Template Form
             </button>
@@ -1287,6 +1581,8 @@ export default function App() {
                 useSchemaForm ? "bg-blue-500 text-white" : "bg-gray-100"
               }`}
               onClick={() => setUseSchemaForm(true)}
+              aria-label="Switch to Schema Form"
+              aria-pressed={useSchemaForm ? "true" : "false"}
             >
               Schema Form
             </button>
@@ -1322,8 +1618,29 @@ export default function App() {
                 data={pageForm}
                 onDataChange={handleSchemaDataChange}
                 onLinkHighlight={(path) => {
-                  info(`Link highlight to field: ${path}`);
-                  // TODO: Implement highlight linking
+                  const userHighlights = highlights.filter(
+                    (h) => h.kind === "user"
+                  );
+
+                  if (pendingHighlightLinkPath === path) {
+                    setPendingHighlightLinkPath(null);
+                    info("Highlight linking cancelled");
+                    return;
+                  }
+
+                  if (userHighlights.length === 0) {
+                    error("Create a highlight before linking");
+                    return;
+                  }
+
+                  if (userHighlights.length === 1) {
+                    info(`Link highlight to field: ${path}`);
+                    linkHighlightToField(path, userHighlights[0].id);
+                    return;
+                  }
+
+                  info(`Select a highlight to link to field: ${path}`);
+                  setPendingHighlightLinkPath(path);
                 }}
               />
             ) : (
@@ -1337,10 +1654,14 @@ export default function App() {
                 <div className="space-y-2">
                   {currentPageTemplate.map((f) => {
                     const keyField = `${currentPage}:${f.id}`;
+                    const inputId = `field-${currentPage}-${f.id}`;
                     return (
                       <div key={f.id} className="space-y-1">
-                        <label className="text-xs">{f.label}</label>
+                        <label htmlFor={inputId} className="text-xs">
+                          {f.label}
+                        </label>
                         <input
+                          id={inputId}
                           className="w-full border p-1 rounded text-sm"
                           placeholder={f.placeholder || ""}
                           value={pageForm[keyField] || ""}
@@ -1351,6 +1672,7 @@ export default function App() {
                               currentPage
                             )
                           }
+                          aria-label={f.label}
                         />
                       </div>
                     );
@@ -1364,7 +1686,20 @@ export default function App() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-sm">Your Highlights</h3>
+              {pendingHighlightLinkPath && (
+                <button
+                  className="text-xs text-blue-600 hover:text-blue-700"
+                  onClick={() => setPendingHighlightLinkPath(null)}
+                >
+                  Cancel
+                </button>
+              )}
             </div>
+            {pendingHighlightLinkPath && (
+              <div className="text-xs text-blue-600">
+                Select a highlight below to link to {pendingHighlightLinkPath}
+              </div>
+            )}
             <ul className="text-sm divide-y max-h-56 overflow-auto">
               {highlights.length === 0 && (
                 <li className="text-xs text-gray-500 py-2">
@@ -1391,9 +1726,24 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-1">
+                    {pendingHighlightLinkPath && h.kind === "user" && (
+                      <button
+                        className="px-2 text-xs border rounded border-blue-300 text-blue-600 hover:text-blue-700 hover:border-blue-400"
+                        onClick={() =>
+                          linkHighlightToField(
+                            pendingHighlightLinkPath!,
+                            h.id
+                          )
+                        }
+                        aria-label={`Link highlight: ${h.label}`}
+                      >
+                        Link
+                      </button>
+                    )}
                     <button
                       className="px-2 text-xs border rounded"
                       onClick={() => jumpToPage(h.pageNumber)}
+                      aria-label={`Go to highlight on page ${h.pageNumber}`}
                     >
                       Go
                     </button>
@@ -1402,12 +1752,14 @@ export default function App() {
                         <button
                           className="px-2 text-xs border rounded"
                           onClick={() => relabelHighlight(h.id)}
+                          aria-label={`Edit label for highlight: ${h.label}`}
                         >
                           ✏
                         </button>
                         <button
                           className="px-2 text-xs border rounded"
                           onClick={() => deleteHighlight(h.id)}
+                          aria-label={`Delete highlight: ${h.label}`}
                         >
                           ✕
                         </button>

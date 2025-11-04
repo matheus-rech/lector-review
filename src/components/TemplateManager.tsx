@@ -3,20 +3,20 @@
  * Manages field templates for data extraction
  */
 
-import React, { useState } from 'react';
-import { InputModal } from './Modal';
+import React, { useState } from "react";
+import { ConfirmModal, InputModal } from "./Modal";
 
 export interface FieldTemplate {
   id: string;
   label: string;
   placeholder?: string;
-  type?: 'string' | 'number' | 'date' | 'select';
+  type?: "string" | "number" | "date" | "select";
   options?: string[]; // For select type
   required?: boolean;
   schemaPath?: string; // Path in JSON schema
 }
 
-interface TemplateManagerProps {
+export interface TemplateManagerProps {
   isOpen: boolean;
   onClose: () => void;
   templates: Record<number, FieldTemplate[]>;
@@ -31,20 +31,29 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   onSaveTemplates,
   totalPages,
 }) => {
-  const [editingTemplates, setEditingTemplates] = useState<Record<number, FieldTemplate[]>>(templates);
+  const [editingTemplates, setEditingTemplates] =
+    useState<Record<number, FieldTemplate[]>>(templates);
   const [selectedPage, setSelectedPage] = useState(1);
   const [addFieldModal, setAddFieldModal] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    type: "remove" | "copy" | "clear" | null;
+    fieldId?: string;
+  }>({
+    isOpen: false,
+    type: null,
+  });
 
   const handleAddField = (label: string) => {
     if (!label) return;
 
     const id = `field_${Date.now()}`;
-    const newField: FieldTemplate = { 
-      id, 
-      label, 
-      placeholder: '',
-      type: 'string',
-      required: false
+    const newField: FieldTemplate = {
+      id,
+      label,
+      placeholder: "",
+      type: "string",
+      required: false,
     };
 
     setEditingTemplates((prev) => ({
@@ -54,15 +63,29 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   };
 
   const handleRemoveField = (fieldId: string) => {
-    if (!window.confirm('Remove this field?')) return;
-    
-    setEditingTemplates((prev) => ({
-      ...prev,
-      [selectedPage]: (prev[selectedPage] || []).filter((f) => f.id !== fieldId),
-    }));
+    setConfirmModal({
+      isOpen: true,
+      type: "remove",
+      fieldId,
+    });
   };
 
-  const handleUpdateField = (fieldId: string, updates: Partial<FieldTemplate>) => {
+  const confirmRemoveField = () => {
+    if (confirmModal.fieldId) {
+      setEditingTemplates((prev) => ({
+        ...prev,
+        [selectedPage]: (prev[selectedPage] || []).filter(
+          (f) => f.id !== confirmModal.fieldId
+        ),
+      }));
+    }
+    setConfirmModal({ isOpen: false, type: null });
+  };
+
+  const handleUpdateField = (
+    fieldId: string,
+    updates: Partial<FieldTemplate>
+  ) => {
     setEditingTemplates((prev) => ({
       ...prev,
       [selectedPage]: (prev[selectedPage] || []).map((f) =>
@@ -77,25 +100,35 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   };
 
   const handleCopyToAllPages = () => {
-    if (!window.confirm('Copy current page template to all pages? This will overwrite existing templates.')) {
-      return;
-    }
-    
+    setConfirmModal({
+      isOpen: true,
+      type: "copy",
+    });
+  };
+
+  const confirmCopyToAllPages = () => {
     const currentTemplate = editingTemplates[selectedPage] || [];
     const newTemplates: Record<number, FieldTemplate[]> = {};
     for (let i = 1; i <= totalPages; i++) {
       newTemplates[i] = JSON.parse(JSON.stringify(currentTemplate));
     }
     setEditingTemplates(newTemplates);
+    setConfirmModal({ isOpen: false, type: null });
   };
 
   const handleClearPage = () => {
-    if (!window.confirm('Clear all fields on this page?')) return;
-    
+    setConfirmModal({
+      isOpen: true,
+      type: "clear",
+    });
+  };
+
+  const confirmClearPage = () => {
     setEditingTemplates((prev) => ({
       ...prev,
       [selectedPage]: [],
     }));
+    setConfirmModal({ isOpen: false, type: null });
   };
 
   const currentPageFields = editingTemplates[selectedPage] || [];
@@ -114,8 +147,18 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               aria-label="Close"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -129,12 +172,15 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                 value={selectedPage}
                 onChange={(e) => setSelectedPage(Number(e.target.value))}
                 className="flex-1 min-w-[120px] px-3 py-2 border dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm"
+                aria-label="Select page number"
               >
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <option key={page} value={page}>
-                    Page {page}
-                  </option>
-                ))}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <option key={page} value={page}>
+                      Page {page}
+                    </option>
+                  )
+                )}
               </select>
               <button
                 onClick={handleCopyToAllPages}
@@ -157,7 +203,9 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
               {currentPageFields.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   <p className="text-sm">No fields for this page</p>
-                  <p className="text-xs mt-1">Click "Add Field" to create one</p>
+                  <p className="text-xs mt-1">
+                    Click "Add Field" to create one
+                  </p>
                 </div>
               ) : (
                 currentPageFields.map((field, index) => (
@@ -173,7 +221,9 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                       <input
                         type="text"
                         value={field.label}
-                        onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                        onChange={(e) =>
+                          handleUpdateField(field.id, { label: e.target.value })
+                        }
                         placeholder="Field label"
                         className="flex-1 px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-sm font-medium"
                       />
@@ -190,9 +240,14 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-medium w-20">Type:</label>
                       <select
-                        value={field.type || 'string'}
-                        onChange={(e) => handleUpdateField(field.id, { type: e.target.value as any })}
+                        value={field.type || "string"}
+                        onChange={(e) =>
+                          handleUpdateField(field.id, {
+                            type: e.target.value as any,
+                          })
+                        }
                         className="flex-1 px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs"
+                        aria-label="Select field type"
                       >
                         <option value="string">Text</option>
                         <option value="number">Number</option>
@@ -203,7 +258,11 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                         <input
                           type="checkbox"
                           checked={field.required || false}
-                          onChange={(e) => handleUpdateField(field.id, { required: e.target.checked })}
+                          onChange={(e) =>
+                            handleUpdateField(field.id, {
+                              required: e.target.checked,
+                            })
+                          }
                           className="rounded"
                         />
                         Required
@@ -213,20 +272,29 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                     {/* Placeholder */}
                     <input
                       type="text"
-                      value={field.placeholder || ''}
-                      onChange={(e) => handleUpdateField(field.id, { placeholder: e.target.value })}
+                      value={field.placeholder || ""}
+                      onChange={(e) =>
+                        handleUpdateField(field.id, {
+                          placeholder: e.target.value,
+                        })
+                      }
                       placeholder="Placeholder text"
                       className="w-full px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs"
                     />
 
                     {/* Options for select type */}
-                    {field.type === 'select' && (
+                    {field.type === "select" && (
                       <input
                         type="text"
-                        value={(field.options || []).join(', ')}
-                        onChange={(e) => handleUpdateField(field.id, { 
-                          options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                        })}
+                        value={(field.options || []).join(", ")}
+                        onChange={(e) =>
+                          handleUpdateField(field.id, {
+                            options: e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          })
+                        }
                         placeholder="Options (comma-separated)"
                         className="w-full px-2 py-1 border dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs"
                       />
@@ -269,7 +337,36 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
         onClose={() => setAddFieldModal(false)}
         onConfirm={handleAddField}
         title="Add Field"
+        message="Enter a label for the new field"
         placeholder="Enter field label"
+      />
+
+      {/* Confirm modals */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen && confirmModal.type === "remove"}
+        onClose={() => setConfirmModal({ isOpen: false, type: null })}
+        onConfirm={confirmRemoveField}
+        title="Remove Field"
+        message="Are you sure you want to remove this field?"
+        type="warning"
+      />
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen && confirmModal.type === "copy"}
+        onClose={() => setConfirmModal({ isOpen: false, type: null })}
+        onConfirm={confirmCopyToAllPages}
+        title="Copy Template"
+        message="Copy current page template to all pages? This will overwrite existing templates."
+        type="warning"
+      />
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen && confirmModal.type === "clear"}
+        onClose={() => setConfirmModal({ isOpen: false, type: null })}
+        onConfirm={confirmClearPage}
+        title="Clear Page"
+        message="Clear all fields on this page?"
+        type="warning"
       />
     </>
   );
