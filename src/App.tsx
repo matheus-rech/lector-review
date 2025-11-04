@@ -399,7 +399,7 @@ function PDFViewerContent({
 
   return (
     <div className="relative w-full h-full">
-      <Pages className="p-6 max-w-4xl mx-auto dark:invert-[94%] dark:hue-rotate-180 dark:brightness-[80%] dark:contrast-[228%]">
+      <Pages className="p-4 w-full dark:invert-[94%] dark:hue-rotate-180 dark:brightness-[80%] dark:contrast-[228%]">
         <Page>
           <CanvasLayer />
           <TextLayer />
@@ -1344,16 +1344,18 @@ export default function App() {
 
             {/* PDF Content Grid */}
             <div
-              className={`flex-1 grid ${
-                showThumbnails ? "grid-cols-[200px_1fr]" : "grid-cols-1"
+              className={`flex-1 grid min-h-0 relative ${
+                showThumbnails ? "grid-cols-[24rem,1fr]" : "grid-cols-[0,1fr]"
               } transition-all duration-300`}
             >
               {/* Thumbnails Sidebar */}
               {showThumbnails && (
-                <div className="border-r bg-gray-50 overflow-y-auto h-full">
-                  <Thumbnails className="p-2 space-y-2">
-                    <Thumbnail className="border rounded hover:border-blue-500 cursor-pointer" />
-                  </Thumbnails>
+                <div className="overflow-y-auto overflow-x-hidden h-full">
+                  <div className="w-96 overflow-x-hidden">
+                    <Thumbnails className="flex flex-col gap-4 items-center py-4">
+                      <Thumbnail className="transition-all w-48 hover:shadow-lg hover:outline hover:outline-gray-300" />
+                    </Thumbnails>
+                  </div>
                 </div>
               )}
 
