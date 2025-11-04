@@ -1,0 +1,41 @@
+// Simplified search results processing - NO highlight creation
+useEffect(() => {
+  const hasExactMatches = searchResults?.exactMatches && searchResults.exactMatches.length > 0;
+  const hasFuzzyMatches = searchResults?.fuzzyMatches && searchResults.fuzzyMatches.length > 0;
+  
+  if (hasExactMatches || hasFuzzyMatches) {
+    // Combine exact and fuzzy matches for total count
+    const exactCount = searchResults.exactMatches?.length || 0;
+    const fuzzyCount = searchResults.fuzzyMatches?.length || 0;
+    const totalCount = exactCount + fuzzyCount;
+    
+    onSearchResultsChange(totalCount);
+    
+    // Combine all matches for results data
+    const allMatches = [
+      ...(searchResults.exactMatches || []).map((match, idx) => ({
+        id: `exact-${idx}-${Date.now()}`,
+        pageNumber: match.pageNumber,
+        text: match.text || "",
+        matchIndex: match.matchIndex,
+        type: 'exact' as const,
+      })),
+      ...(searchResults.fuzzyMatches || []).map((match, idx) => ({
+        id: `fuzzy-${idx}-${Date.now()}`,
+        pageNumber: match.pageNumber,
+        text: match.text || "",
+        matchIndex: match.matchIndex,
+        type: 'fuzzy' as const,
+      })),
+    ];
+    
+    onSearchResultsData(allMatches as SearchMatch[]);
+  } else {
+    onSearchResultsChange(0);
+    onSearchResultsData([]);
+  }
+}, [
+  searchResults,
+  onSearchResultsChange,
+  onSearchResultsData,
+]);

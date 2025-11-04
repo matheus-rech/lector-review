@@ -4,9 +4,11 @@ import {
   CanvasLayer,
   CurrentZoom,
   CustomLayer,
+  HighlightLayer,
   Page,
   Pages,
   Root,
+  Search,
   // NEW: Selection tooltip
   SelectionTooltip,
   TextLayer,
@@ -228,7 +230,6 @@ function PDFViewerContent({
   onAddHighlight,
   searchTerm,
   onSearchResultsChange,
-  onUpdateSearchHighlights,
   onPageChange,
   onJumpToPageReady,
   onSearchResultsData,
@@ -239,7 +240,6 @@ function PDFViewerContent({
   onAddHighlight: (rect: Rect, pageNumber: number, label: string) => void;
   searchTerm: string;
   onSearchResultsChange: (count: number) => void;
-  onUpdateSearchHighlights: (searchHighlights: LabeledHighlight[]) => void;
   onPageChange: (page: number, total: number) => void;
   onJumpToPageReady: (
     jumpFn: (page: number, options?: { behavior: "auto" }) => void
@@ -301,159 +301,58 @@ function PDFViewerContent({
     }
   }, [searchTerm, search, onSearchError]);
 
-  // Convert search results to highlights and update count using calculateHighlightRects
+  // Process search results and update count (HighlightLayer handles visual highlighting)
   useEffect(() => {
-    if (searchResults?.exactMatches && searchResults.exactMatches.length > 0) {
-      onSearchResultsChange(searchResults.exactMatches.length);
-      onSearchResultsData(
-        searchResults.exactMatches.map((match, idx) => ({
-          id: `search-${idx}-${Date.now()}`,
+    const hasExactMatches = searchResults?.exactMatches && searchResults.exactMatches.length > 0;
+    const hasFuzzyMatches = searchResults?.fuzzyMatches && searchResults.fuzzyMatches.length > 0;
+    
+    if (hasExactMatches || hasFuzzyMatches) {
+      // Combine exact and fuzzy matches for total count
+      const exactCount = searchResults.exactMatches?.length || 0;
+      const fuzzyCount = searchResults.fuzzyMatches?.length || 0;
+      const totalCount = exactCount + fuzzyCount;
+      
+      onSearchResultsChange(totalCount);
+      
+      // Combine all matches for results data
+      const allMatches = [
+        ...(searchResults.exactMatches || []).map((match, idx) => ({
+          id: `exact-${idx}-${Date.now()}`,
           pageNumber: match.pageNumber,
           text: match.text || "",
           matchIndex: match.matchIndex,
-        })) as SearchMatch[]
-      );
-
-      // Use calculateHighlightRects for accurate positioning
-      let cancelled = false;
-
-      const createSearchHighlights = async () => {
-        const searchHighlights: LabeledHighlight[] = [];
-
-        for (const [index, match] of searchResults.exactMatches.entries()) {
-          if (cancelled) break;
-
-          try {
-            // Get page proxy for accurate rect calculation
-            const pageProxy = getPdfPageProxy
-              ? getPdfPageProxy(match.pageNumber)
-              : null;
-
-            if (pageProxy) {
-              // Use calculateHighlightRects for accurate positioning
-              const rects = await calculateHighlightRects(pageProxy, {
-                pageNumber: match.pageNumber,
-                text: match.text,
-                matchIndex: match.matchIndex || 0,
-              });
-
-              // Convert accurate rects to our highlight format
-              rects.forEach(
-                (rect: {
-                  pageNumber: number;
-                  left: number;
-                  top: number;
-                  width: number;
-                  height: number;
-                }) => {
-                  searchHighlights.push({
-                    id: `search-${index}-${
-                      searchHighlights.length
-                    }-${Date.now()}`,
-                    label: `Search: "${searchTerm}"`,
-                    kind: "search" as const,
-                    pageNumber: rect.pageNumber,
-                    x: rect.left,
-                    y: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                  });
-                }
-              );
-            } else {
-              // Fallback to manual extraction if page proxy unavailable
-              const matchWithRects = match as unknown as SearchMatch & {
-                rects?: Array<{
-                  x: number;
-                  y: number;
-                  width: number;
-                  height: number;
-                }>;
-                rect?: { x: number; y: number; width: number; height: number };
-              };
-              const rect =
-                matchWithRects.rects && matchWithRects.rects[0]
-                  ? matchWithRects.rects[0]
-                  : matchWithRects.rect
-                  ? matchWithRects.rect
-                  : { x: 100, y: 100, width: 200, height: 20 };
-
-              searchHighlights.push({
-                id: `search-${index}-${Date.now()}`,
-                label: `Search: "${searchTerm}"`,
-                kind: "search" as const,
-                pageNumber: match.pageNumber || 1,
-                x: rect.x || 0,
-                y: rect.y || 0,
-                width: rect.width || 200,
-                height: rect.height || 20,
-              });
-            }
-          } catch (error) {
-            console.error(
-              "Failed to calculate highlight rects for match:",
-              error
-            );
-
-            // Notify parent of error
-            if (onSearchError && error instanceof Error) {
-              onSearchError(error);
-            }
-
-            // Fallback to manual extraction on error
-            const matchWithRects = match as unknown as SearchMatch & {
-              rects?: Array<{
-                x: number;
-                y: number;
-                width: number;
-                height: number;
-              }>;
-              rect?: { x: number; y: number; width: number; height: number };
-            };
-            const rect =
-              matchWithRects.rects && matchWithRects.rects[0]
-                ? matchWithRects.rects[0]
-                : matchWithRects.rect
-                ? matchWithRects.rect
-                : { x: 100, y: 100, width: 200, height: 20 };
-
-            searchHighlights.push({
-              id: `search-${index}-${Date.now()}`,
-              label: `Search: "${searchTerm}"`,
-              kind: "search" as const,
-              pageNumber: match.pageNumber || 1,
-              x: rect.x || 0,
-              y: rect.y || 0,
-              width: rect.width || 200,
-              height: rect.height || 20,
-            });
-          }
-        }
-
-        if (!cancelled) {
-          onUpdateSearchHighlights(searchHighlights);
-        }
-      };
-
-      createSearchHighlights();
-
-      // Cleanup function to prevent state updates after unmount
-      return () => {
-        cancelled = true;
-      };
+          type: 'exact' as const,
+        })),
+        ...(searchResults.fuzzyMatches || []).map((match, idx) => ({
+          id: `fuzzy-${idx}-${Date.now()}`,
+          pageNumber: match.pageNumber,
+          text: match.text || "",
+          matchIndex: match.matchIndex,
+          type: 'fuzzy' as const,
+        })),
+      ];
+      
+      onSearchResultsData(allMatches as SearchMatch[]);
     } else {
       onSearchResultsChange(0);
       onSearchResultsData([]);
     }
   }, [
     searchResults,
-    searchTerm,
-    getPdfPageProxy,
     onSearchResultsChange,
     onSearchResultsData,
-    onUpdateSearchHighlights,
-    onSearchError,
   ]);
+
+  // OLD CODE REMOVED - HighlightLayer now handles visual highlighting automatically
+  // The old async highlight creation code has been removed
+  // Search highlighting now works via jumpToHighlightRects() when clicking results
+
+  /*
+  // REMOVED: Old highlight creation code (lines 354-601)
+  // This entire async function has been removed because HighlightLayer
+  // now handles search highlighting automatically via jumpToHighlightRects()
+  */
+
 
   // Handle text selection - store pending selection
   useEffect(() => {
@@ -525,13 +424,36 @@ function PDFViewerContent({
           <CanvasLayer />
           <TextLayer />
           <AnnotationLayer />
+          <HighlightLayer className="bg-yellow-300/40" />
           <CustomLayer>
             {(pageNumber) => {
               const pageHighlights = highlights.filter(
                 (h) => h.pageNumber === pageNumber
               );
+              console.log(`[CustomLayer] Page ${pageNumber}: ${pageHighlights.length} highlights`);
+              console.log(`[CustomLayer] Total highlights available:`, highlights.length);
+              console.log(`[CustomLayer] Search highlights:`, highlights.filter(h => h.kind === 'search').length);
+              
+              // Add a test highlight to verify CustomLayer is rendering
+              const testHighlight = pageNumber === 1 ? (
+                <div
+                  key="test-highlight"
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: '100px',
+                    top: '100px',
+                    width: '200px',
+                    height: '30px',
+                    backgroundColor: 'rgba(255, 0, 0, 0.5)',
+                    border: '2px solid red',
+                    zIndex: 9999,
+                  }}
+                />
+              ) : null;
+              
               return (
-                <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 100 }}>
+                  {testHighlight}
                   {pageHighlights.map((h) => (
                     <div
                       key={h.id}
@@ -1159,16 +1081,7 @@ export default function App() {
     success("Data exported as CSV");
   };
 
-  /** Handle search highlights from PDFViewerContent */
-  const handleSearchHighlights = useCallback(
-    (searchHighlights: LabeledHighlight[]) => {
-      setHighlights((prev) => {
-        const userHighlights = prev.filter((h) => h.kind !== "search");
-        return [...userHighlights, ...searchHighlights];
-      });
-    },
-    []
-  );
+  // REMOVED: handleSearchHighlights callback - no longer needed with HighlightLayer
 
   /** Handle search results data */
   const handleSearchResultsData = useCallback((results: SearchMatch[]) => {
@@ -1178,14 +1091,43 @@ export default function App() {
 
   /** Navigate to specific search result */
   const jumpToSearchResult = useCallback(
-    (index: number) => {
-      if (searchResultsData[index] && jumpToPageFn.current) {
+    async (index: number) => {
+      console.log('[jumpToSearchResult] Called with index:', index);
+      if (searchResultsData[index]) {
         const result = searchResultsData[index];
-        jumpToPageFn.current(result.pageNumber);
-        setCurrentSearchIndex(index);
+        console.log('[jumpToSearchResult] Result:', result);
+        const { jumpToHighlightRects } = usePdfJump.getState();
+        const getPdfPageProxy = usePdf.getState().getPdfPageProxy;
+        console.log('[jumpToSearchResult] jumpToHighlightRects type:', typeof jumpToHighlightRects);
+        
+        try {
+          const pageProxy = getPdfPageProxy(result.pageNumber);
+          const rects = await calculateHighlightRects(pageProxy, {
+            pageNumber: result.pageNumber,
+            text: result.text,
+            matchIndex: result.matchIndex,
+            searchText: searchTerm, // Pass searchText for exact term highlighting
+          });
+          
+          console.log('[jumpToSearchResult] Rects:', rects, 'Length:', rects?.length);
+          
+          if (rects && rects.length > 0) {
+            console.log('[jumpToSearchResult] Calling jumpToHighlightRects');
+            jumpToHighlightRects(rects, "pixels");
+            console.log('[jumpToSearchResult] jumpToHighlightRects called');
+            setCurrentSearchIndex(index);
+          }
+        } catch (error) {
+          console.error('[jumpToSearchResult] Error:', error);
+          // Fallback to page jump if highlighting fails
+          if (jumpToPageFn.current) {
+            jumpToPageFn.current(result.pageNumber);
+            setCurrentSearchIndex(index);
+          }
+        }
       }
     },
-    [searchResultsData]
+    [searchResultsData, searchTerm]
   );
 
   /** Navigate to next search result */
@@ -1366,7 +1308,10 @@ export default function App() {
                   .map((result: SearchMatch, index: number) => (
                     <div
                       key={index}
-                      onClick={() => jumpToSearchResult(index)}
+                      onClick={() => {
+                        console.log('[onClick] Search result clicked, index:', index);
+                        jumpToSearchResult(index);
+                      }}
                       className={`p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 ${
                         index === currentSearchIndex ? "bg-blue-100" : ""
                       }`}
@@ -1382,8 +1327,21 @@ export default function App() {
                         }
                       }}
                     >
-                      <div className="font-medium text-blue-700">
-                        Page {result.pageNumber}
+                      <div className="flex items-center justify-between">
+                        <div className="font-medium text-blue-700">
+                          Page {result.pageNumber}
+                        </div>
+                        {(result as any).type && (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              (result as any).type === 'exact'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-orange-100 text-orange-700'
+                            }`}
+                          >
+                            {(result as any).type === 'exact' ? '✓ Exact' : '≈ Fuzzy'}
+                          </span>
+                        )}
                       </div>
                       <div className="text-gray-600 truncate">
                         {result.text?.substring(0, 60) || "Match found"}...
@@ -1487,12 +1445,13 @@ export default function App() {
 
               {/* Main PDF Viewer */}
               <div className="overflow-y-auto h-full">
-                <PDFViewerContent
+                <Search>
+                  <PDFViewerContent
                   highlights={highlights}
                   onAddHighlight={addHighlight}
                   searchTerm={searchTerm}
                   onSearchResultsChange={setSearchResultCount}
-                  onUpdateSearchHighlights={handleSearchHighlights}
+                  // onUpdateSearchHighlights removed - HighlightLayer handles highlighting
                   onPageChange={handlePageChange}
                   onJumpToPageReady={handleJumpToPageReady}
                   onSearchResultsData={handleSearchResultsData}
@@ -1501,7 +1460,8 @@ export default function App() {
                     console.error("Search error:", err);
                     error(`Search failed: ${err.message || "Unknown error"}`);
                   }}
-                />
+                  />
+                </Search>
               </div>
             </div>
           </Root>
