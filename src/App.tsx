@@ -672,8 +672,9 @@ export default function App() {
     const saved = localStorage.getItem(`proj:${currentProject}:pageForm`);
     return saved ? JSON.parse(saved) : {};
   });
-  const [pendingHighlightLinkPath, setPendingHighlightLinkPath] =
-    useState<string | null>(null);
+  const [pendingHighlightLinkPath, setPendingHighlightLinkPath] = useState<
+    string | null
+  >(null);
 
   /** Page Navigation - synced with PDFViewerContent */
   const [currentPage, setCurrentPage] = useState(1);
@@ -1114,17 +1115,27 @@ export default function App() {
       ],
     ];
     Object.entries(pageForm).forEach(([key, value]) => {
-      if (!key.includes(":")) {
-        return;
-      }
-      const [page, field] = key.split(":");
-      
       // Extract actual value if it's a SourcedValue object
       const actualValue =
         value && typeof value === "object" && "value" in value
           ? (value as { value: unknown }).value
           : value;
-      
+
+      let page: string;
+      let field: string;
+
+      // Template form fields use "page:field" format
+      // Schema form fields use dot-notation paths like "I_StudyMetadata.studyID"
+      if (key.includes(":")) {
+        const parts = key.split(":");
+        page = parts[0] || "";
+        field = parts.slice(1).join(":"); // Handle cases where field contains ":"
+      } else {
+        // Schema form field - use dot notation path as field name
+        page = ""; // Schema fields don't have page numbers
+        field = key;
+      }
+
       rows.push([
         currentProject,
         page || "",
@@ -1730,10 +1741,7 @@ export default function App() {
                       <button
                         className="px-2 text-xs border rounded border-blue-300 text-blue-600 hover:text-blue-700 hover:border-blue-400"
                         onClick={() =>
-                          linkHighlightToField(
-                            pendingHighlightLinkPath!,
-                            h.id
-                          )
+                          linkHighlightToField(pendingHighlightLinkPath!, h.id)
                         }
                         aria-label={`Link highlight: ${h.label}`}
                       >
