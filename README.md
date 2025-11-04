@@ -1,56 +1,85 @@
-# Lector Review
+# Lector Review - Production
 
-A React-based PDF viewer application with advanced features for systematic review and data extraction from research papers.
+A production-ready **PDF viewer and systematic review data extraction application** built with React, TypeScript, and the Lector PDF library. This application provides comprehensive tools for managing multiple projects, annotating PDFs, extracting structured data, and exporting results for systematic reviews and meta-analyses.
 
-## Features
+![Lector Review](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![React](https://img.shields.io/badge/React-19-61DAFB.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6.svg)
 
-### 📁 Multi-Project Management
-- Create and manage multiple projects with isolated data
+## 🎯 Features
+
+### Multi-Project Management
+- Create and manage multiple isolated projects
 - Switch between projects seamlessly
 - Delete projects (except the default one)
 - All data persisted in browser localStorage
 
-### 📄 PDF Viewing
-- Powered by `@anaralabs/lector` and `pdfjs-dist`
-- High-quality PDF rendering
-- Page navigation controls
-- Zoom and pan capabilities
+### PDF Viewing & Navigation
+- High-quality PDF rendering with Canvas, Text, and Annotation layers
+- **Collapsible thumbnail panel** with page previews
+- **Floating page navigation** with Previous/Next/First/Last buttons
+- **Direct page jump** via input field
+- **Zoom controls** (50%-300%) with visual feedback
+- **Dark mode support** with proper color inversion
+- **Single-page view** for focused reading
 
-### 🔍 Search Functionality
+### Text Selection & Highlighting
+- Select text directly in the PDF with custom tooltip
+- Create labeled highlights with custom names
+- Visual highlight rendering (green for user highlights, yellow for search)
+- Highlight management (rename, delete, jump to)
+- Persistent storage per project
+
+### Search Functionality
 - Full-text search across the PDF
-- Auto-highlighting of search results
-- Navigate between search hits with previous/next buttons
+- Search term processing and result tracking
 - Real-time search result count
 
-### ✏️ Manual Highlighting
-- Select text or regions in the PDF
-- Add custom labels to highlights (e.g., "n", "mean", "CI")
-- Rename or delete highlights
-- Jump to specific highlights
-- Highlights persist per project
+### Data Extraction System
 
-### 📋 Per-Page Field Templates
-- Define custom data extraction fields for each page
-- Pre-configured templates for common research paper sections:
-  - Page 1: Study ID, Design
-  - Page 2: Total N, Arms description
-  - Page 3: Primary Outcome, Effect, 95% CI
-- Add new fields dynamically
-- All field values persist per project
+#### Document-Level Template Form
+- **17 pre-configured fields** for systematic review data extraction
+- Fields available on **all pages** (not page-specific)
+- Organized by category:
+  - **Study Identification**: DOI/PMID, First Author, Year, Country
+  - **Study Design**: Research Question, Study Design, Control Definition
+  - **Sample Size**: Total Patients, Intervention/Control Group Sizes
+  - **Demographics**: Age, Gender, Baseline Status
+  - **Outcomes**: Primary Outcome, Effect Measure, 95% CI, P-value
+- Data persists across page navigation
 
-### 📝 Embedded PDF Form Support
+#### Comprehensive Schema Form
+- Structured form with nested sections
+- **I. Study Metadata and Identification**
+- **II. Risk of Bias Assessment**
+- **III. Study Design and Purpose**
+- Each field includes value, source text, and source location
+- Document-level data storage
+
+### Export Capabilities
+- **Export JSON**: Complete project data including highlights, templates, and form data
+- **Export CSV**: Tabular format with highlights, page fields, and PDF form data
+- Easy integration with statistical analysis tools
+
+### Embedded PDF Form Support
 - Capture data from PDF AcroForms
 - Submit and save form values locally
 - Persist form data per project
 
-### 💾 Export Capabilities
-- **JSON Export**: Complete project data including highlights, templates, and form data
-- **CSV Export**: Tabular format with highlights, page fields, and PDF form data
-- Easy data integration with other tools
+## 🚀 Quick Start
 
-## Installation
+### Prerequisites
+- Node.js 22.x or higher
+- pnpm (recommended) or npm
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/matheus-rech/lector-review-production.git
+cd lector-review-production
+
 # Install dependencies
 pnpm install
 
@@ -64,71 +93,144 @@ pnpm run build
 pnpm run preview
 ```
 
-## Usage
+### Usage
 
-1. **Open the application** at [http://localhost:5173](http://localhost:5173)
-
+1. **Open the application** in your browser (default: http://localhost:5173)
 2. **Select or create a project** using the dropdown and buttons in the left sidebar
+3. **Load a PDF** by:
+   - Uploading a file using the file input
+   - Entering a PDF URL in the URL field
+   - Default sample PDF loads automatically
+4. **Navigate the PDF** using:
+   - Thumbnail panel (click thumbnails to jump to pages)
+   - Floating navigation buttons at the bottom center
+   - Zoom controls for better readability
+5. **Extract data**:
+   - Use **Template Form** for quick extraction with pre-configured fields
+   - Use **Schema Form** for comprehensive structured data extraction
+   - Fill in fields from any page in the PDF
+6. **Create highlights**:
+   - Select text in the PDF
+   - Add custom labels to highlights
+   - Manage highlights in the right sidebar
+7. **Search the PDF**:
+   - Enter search terms in the search box
+   - Navigate between search results
+8. **Export your data**:
+   - Click "Export JSON" for complete project data
+   - Click "Export CSV" for tabular format
 
-3. **Load a PDF** by changing the PDF Source field (default: `/sample.pdf`)
+## 📚 Technology Stack
 
-4. **Search the PDF** by typing in the search box - matches will be auto-highlighted
+- **React 19** - UI framework with latest features
+- **TypeScript 5.6** - Type safety and developer experience
+- **Vite 5.4** - Fast build tool and dev server
+- **Tailwind CSS 3.4** - Utility-first CSS framework
+- **@anaralabs/lector 3.7.2** - PDF viewer component library
+- **pdfjs-dist 4.9** - PDF.js library for PDF rendering
 
-5. **Add highlights**:
-   - Select text or a region in the PDF
-   - Click "Add from Selection"
-   - Enter a label for the highlight
-
-6. **Fill in page fields** in the right sidebar based on the current page template
-
-7. **Export your data** using the "Export JSON" or "Export CSV" buttons
-
-## Project Structure
+## 🏗️ Project Structure
 
 ```
-lector-review/
-├── index.html              # HTML entry point
-├── package.json            # Dependencies and scripts
-├── vite.config.ts          # Vite configuration
-├── tsconfig.json           # TypeScript configuration
-├── tailwind.config.js      # Tailwind CSS configuration
-├── postcss.config.js       # PostCSS configuration
+lector-review-production/
 ├── public/
-│   └── sample.pdf          # Sample PDF for testing
-└── src/
-    ├── main.tsx            # Application entry point
-    ├── App.tsx             # Main application component
-    └── index.css           # Global styles
+│   └── sample.pdf              # Sample PDF for testing
+├── src/
+│   ├── components/
+│   │   ├── Modal.tsx           # Modal dialogs
+│   │   ├── PageNavigationButtons.tsx  # Floating navigation
+│   │   ├── SchemaForm.tsx      # Comprehensive form
+│   │   ├── TemplateManager.tsx # Template management
+│   │   └── index.ts            # Component exports
+│   ├── App.tsx                 # Main application component
+│   ├── main.tsx                # Application entry point
+│   ├── index.css               # Global styles
+│   └── vite-env.d.ts           # TypeScript declarations
+├── package.json                # Dependencies and scripts
+├── tsconfig.json               # TypeScript configuration
+├── vite.config.ts              # Vite configuration
+├── tailwind.config.js          # Tailwind CSS configuration
+├── postcss.config.js           # PostCSS configuration
+└── README.md                   # This file
 ```
 
-## Technology Stack
+## 🔧 Configuration
 
-- **React 19** - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool and dev server
-- **Tailwind CSS** - Styling
-- **@anaralabs/lector** - PDF viewer component library
-- **pdfjs-dist** - PDF.js library for PDF rendering
+### PDF Worker
+The application uses PDF.js worker for rendering. The worker is configured in `src/main.tsx`:
 
-## Data Persistence
+```typescript
+import * as pdfjsLib from "pdfjs-dist";
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url
+).toString();
+```
 
-All data is stored in browser `localStorage` with the following structure:
+### Local Storage
+All project data is stored in browser localStorage with the following keys:
+- `proj:{projectName}:highlights` - Highlight data
+- `proj:{projectName}:templates` - Template configuration
+- `proj:{projectName}:pageForm` - Form data
+- `proj:{projectName}:searchTerm` - Search state
 
-- `projects`: List of all project names
-- `current-project`: Currently selected project
-- `proj:{projectName}:highlights`: User-created highlights
-- `proj:{projectName}:pageForm`: Per-page field values
-- `proj:{projectName}:templates`: Per-page field templates
-- `proj:{projectName}:pdfFormData`: Embedded PDF form data
+## 🎨 Customization
 
-## Notes
+### Adding Custom Fields
+Edit the `defaultTemplates` array in `src/App.tsx` to add or modify extraction fields:
 
-- **Auto-highlighted search**: Search matches are visualized as highlights and you can navigate between them
-- **Per-page templates**: Fields are tied to specific pages and can be customized
-- **Highlight labeling**: Select text, add a label, and manage highlights from the right sidebar
-- **PDF forms**: Embedded AcroForms are handled by the AnnotationLayer component
-- **Multi-project support**: All data is namespaced by project name in localStorage
+```typescript
+const defaultTemplates: FieldTemplate[] = [
+  {
+    id: "custom_field",
+    label: "Custom Field Label",
+    placeholder: "Placeholder text",
+  },
+  // ... more fields
+];
+```
 
-## License
+### Styling
+The application uses Tailwind CSS. Customize styles by:
+1. Editing `tailwind.config.js` for theme customization
+2. Modifying component classes in `src/App.tsx` and components
+3. Adding custom CSS in `src/index.css`
 
-MIT
+## 🐛 Known Issues
+
+### Lector Library Limitations
+- The Lector v3.7.2 library has some known limitations documented in the [official repository](https://github.com/anaralabs/lector/issues)
+- All documented features from Lector are properly implemented in this application
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📧 Support
+
+For issues, questions, or suggestions, please open an issue on GitHub.
+
+## 🙏 Acknowledgments
+
+- [Lector PDF Library](https://lector-weld.vercel.app/) by Anara Labs
+- [PDF.js](https://mozilla.github.io/pdf.js/) by Mozilla
+- [React](https://react.dev/) by Meta
+- [Tailwind CSS](https://tailwindcss.com/) by Tailwind Labs
+
+## 📊 Version History
+
+### v1.0.0 (2024-11-04)
+- ✅ Full compliance with Lector v3.7.2 documentation
+- ✅ Fixed page navigation (moved inside Root component)
+- ✅ Fixed thumbnail toggle functionality
+- ✅ Dynamic page count detection
+- ✅ Document-level Template Form (not page-specific)
+- ✅ Single-page view for better readability
+- ✅ Removed duplicate navigation controls
+- ✅ Comprehensive data extraction system
+- ✅ Multi-project management
+- ✅ Export to JSON and CSV formats

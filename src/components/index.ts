@@ -36,3 +36,5 @@ export type { SchemaFormProps } from "./SchemaForm";
 
 // Error Boundary
 export { ErrorBoundary } from "./ErrorBoundary";
+// Page Navigation
+export { PageNavigationButtons } from "./PageNavigationButtons";

@@ -10,6 +10,8 @@ import {
   // NEW: Selection tooltip
   SelectionTooltip,
   TextLayer,
+  // NEW: AnnotationLayer for PDF forms and links
+  AnnotationLayer,
   Thumbnail,
   // NEW: Thumbnail navigation
   Thumbnails,
@@ -25,7 +27,7 @@ import {
 import { GlobalWorkerOptions } from "pdfjs-dist";
 import "pdfjs-dist/web/pdf_viewer.css";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PDFList, PDFUpload } from "./components";
+import { PDFList, PDFUpload, PageNavigationButtons } from "./components";
 import { ConfirmModal, InputModal } from "./components/Modal";
 import { SchemaForm } from "./components/SchemaForm";
 import { TemplateManager } from "./components/TemplateManager";
@@ -59,87 +61,83 @@ let uidCounter = 0;
 const uid = () => `h${++uidCounter}`;
 
 /** ---------- Default Templates for Systematic Review ---------- */
-const defaultTemplates: Record<number, FieldTemplate[]> = {
-  1: [
-    {
-      id: "study_id",
-      label: "Study ID (DOI/PMID)",
-      placeholder: "e.g., 10.1161/STROKEAHA.116.014078",
-    },
-    { id: "first_author", label: "First Author", placeholder: "e.g., Kim" },
-    { id: "year", label: "Year of Publication", placeholder: "e.g., 2016" },
-    { id: "country", label: "Country", placeholder: "e.g., Korea" },
-  ],
-  2: [
-    {
-      id: "research_question",
-      label: "Research Question",
-      placeholder: "Primary research question",
-    },
-    {
-      id: "study_design",
-      label: "Study Design",
-      placeholder: "e.g., Retrospective-Matched Case-Control",
-    },
-    {
-      id: "control_definition",
-      label: "Control Group Definition",
-      placeholder: "How was control defined?",
-    },
-  ],
-  3: [
-    {
-      id: "total_patients",
-      label: "Total Patients (N)",
-      placeholder: "e.g., 112",
-    },
-    {
-      id: "intervention_size",
-      label: "Intervention Group Size",
-      placeholder: "e.g., 28",
-    },
-    {
-      id: "control_size",
-      label: "Control Group Size",
-      placeholder: "e.g., 56",
-    },
-  ],
-  4: [
-    {
-      id: "age_mean",
-      label: "Age (Mean ± SD)",
-      placeholder: "e.g., 59.0 ± 11.6",
-    },
-    {
-      id: "gender_male_pct",
-      label: "Gender (% Male)",
-      placeholder: "e.g., 64.3%",
-    },
-    {
-      id: "baseline_status",
-      label: "Baseline Neurological Status",
-      placeholder: "e.g., GCS score, NIHSS",
-    },
-  ],
-  5: [
-    {
-      id: "primary_outcome",
-      label: "Primary Outcome",
-      placeholder: "e.g., mRS 0-2 at 12 months",
-    },
-    {
-      id: "effect_measure",
-      label: "Effect Measure (OR/RR/HR)",
-      placeholder: "e.g., OR 4.815",
-    },
-    {
-      id: "confidence_interval",
-      label: "95% CI",
-      placeholder: "e.g., [1.45, 3.78]",
-    },
-    { id: "p_value", label: "P-value", placeholder: "e.g., 0.009" },
-  ],
-};
+/** Document-level fields (available on all pages) */
+const defaultTemplates: FieldTemplate[] = [
+  // Study Identification
+  {
+    id: "study_id",
+    label: "Study ID (DOI/PMID)",
+    placeholder: "e.g., 10.1161/STROKEAHA.116.014078",
+  },
+  { id: "first_author", label: "First Author", placeholder: "e.g., Kim" },
+  { id: "year", label: "Year of Publication", placeholder: "e.g., 2016" },
+  { id: "country", label: "Country", placeholder: "e.g., Korea" },
+  // Study Design
+  {
+    id: "research_question",
+    label: "Research Question",
+    placeholder: "Primary research question",
+  },
+  {
+    id: "study_design",
+    label: "Study Design",
+    placeholder: "e.g., Retrospective-Matched Case-Control",
+  },
+  {
+    id: "control_definition",
+    label: "Control Group Definition",
+    placeholder: "How was control defined?",
+  },
+  // Sample Size
+  {
+    id: "total_patients",
+    label: "Total Patients (N)",
+    placeholder: "e.g., 112",
+  },
+  {
+    id: "intervention_size",
+    label: "Intervention Group Size",
+    placeholder: "e.g., 28",
+  },
+  {
+    id: "control_size",
+    label: "Control Group Size",
+    placeholder: "e.g., 56",
+  },
+  // Demographics
+  {
+    id: "age_mean",
+    label: "Age (Mean ± SD)",
+    placeholder: "e.g., 59.0 ± 11.6",
+  },
+  {
+    id: "gender_male_pct",
+    label: "Gender (% Male)",
+    placeholder: "e.g., 64.3%",
+  },
+  {
+    id: "baseline_status",
+    label: "Baseline Neurological Status",
+    placeholder: "e.g., GCS score, NIHSS",
+  },
+  // Outcomes
+  {
+    id: "primary_outcome",
+    label: "Primary Outcome",
+    placeholder: "e.g., mRS 0-2 at 12 months",
+  },
+  {
+    id: "effect_measure",
+    label: "Effect Measure (OR/RR/HR)",
+    placeholder: "e.g., OR 4.815",
+  },
+  {
+    id: "confidence_interval",
+    label: "95% CI",
+    placeholder: "e.g., [1.45, 3.78]",
+  },
+  { id: "p_value", label: "P-value", placeholder: "e.g., 0.009" },
+];
 
 const arrayPathRegex = /^(.+)\[(\d+)\]$/;
 
@@ -264,14 +262,11 @@ function PDFViewerContent({
   const totalPages = pdfDocumentProxy?.numPages || 0;
   const { searchResults, search } = useSearch();
 
-  // Track if we've already set up jumpToPage
-  const hasSetupJumpToPage = useRef(false);
-
-  // Expose jumpToPage function to parent once on mount
+  // Expose jumpToPage function to parent whenever it changes
   useEffect(() => {
-    if (jumpToPage && !hasSetupJumpToPage.current) {
+    if (jumpToPage) {
+      console.log('[PDFViewerContent] jumpToPage is now available, notifying parent');
       onJumpToPageReady(jumpToPage);
-      hasSetupJumpToPage.current = true;
     }
   }, [jumpToPage, onJumpToPageReady]);
 
@@ -525,10 +520,11 @@ function PDFViewerContent({
         )}
       </SelectionTooltip>
 
-      <Pages className="p-6">
+      <Pages className="p-6 max-w-4xl mx-auto dark:invert-[94%] dark:hue-rotate-180 dark:brightness-[80%] dark:contrast-[228%]">
         <Page>
           <CanvasLayer />
           <TextLayer />
+          <AnnotationLayer />
           <CustomLayer>
             {(pageNumber) => {
               const pageHighlights = highlights.filter(
@@ -558,6 +554,9 @@ function PDFViewerContent({
           </CustomLayer>
         </Page>
       </Pages>
+      
+      {/* Page Navigation Buttons - Inside Root for context access */}
+      <PageNavigationButtons onPageChange={onPageChange} />
     </div>
   );
 }
@@ -647,10 +646,18 @@ export default function App() {
   });
 
   /** Field Templates */
-  const [templates, setTemplates] = useState<Record<number, FieldTemplate[]>>(
+  const [templates, setTemplates] = useState<FieldTemplate[]>(
     () => {
       const saved = localStorage.getItem(`proj:${currentProject}:templates`);
-      return saved ? JSON.parse(saved) : defaultTemplates;
+      if (!saved) return defaultTemplates;
+      
+      const parsed = JSON.parse(saved);
+      // Migration: convert old page-based format to document-level array
+      if (!Array.isArray(parsed)) {
+        console.log('Migrating old page-based templates to document-level');
+        return defaultTemplates;
+      }
+      return parsed;
     }
   );
 
@@ -1045,14 +1052,15 @@ export default function App() {
   };
 
   /** Template input */
-  const currentPageTemplate = templates[currentPage] || [];
+  // Document-level templates (same fields available on all pages)
+  const currentPageTemplate = templates;
   const handleTemplateInput = (
     fieldId: string,
     value: string,
-    page: number
+    page: number // kept for compatibility but not used
   ) => {
-    const key = `${page}:${fieldId}`;
-    setPageForm((prev) => ({ ...prev, [key]: value }));
+    // Document-level: use field ID directly without page prefix
+    setPageForm((prev) => ({ ...prev, [fieldId]: value }));
   };
 
   /** Schema form handler */
@@ -1065,7 +1073,7 @@ export default function App() {
 
   /** Template Manager handlers */
   const handleSaveTemplates = (
-    newTemplates: Record<number, FieldTemplate[]>
+    newTemplates: FieldTemplate[]
   ) => {
     setTemplates(newTemplates);
     success("Templates saved");
@@ -1420,6 +1428,14 @@ export default function App() {
             source={pdfSource}
             className="flex-1 flex flex-col"
             zoomOptions={{ minZoom: 0.5, maxZoom: 3 }}
+            loader={
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading PDF...</p>
+                </div>
+              </div>
+            }
             onError={(err: Error | unknown) => {
               console.error("PDF loading error:", err);
               const errorMessage =
@@ -1457,12 +1473,12 @@ export default function App() {
             {/* PDF Content Grid */}
             <div
               className={`flex-1 grid ${
-                showThumbnails ? "grid-cols-[200px_1fr]" : "grid-cols-[0_1fr]"
-              } transition-all duration-300`}
+                showThumbnails ? "grid-cols-[200px_1fr]" : "grid-cols-1"
+              } transition-all duration-300 overflow-hidden`}
             >
               {/* Thumbnails Sidebar */}
               {showThumbnails && (
-                <div className="border-r bg-gray-50 overflow-y-auto">
+                <div className="border-r bg-gray-50 overflow-y-auto h-full">
                   <Thumbnails className="p-2 space-y-2">
                     <Thumbnail className="border rounded hover:border-blue-500 cursor-pointer" />
                   </Thumbnails>
@@ -1470,7 +1486,7 @@ export default function App() {
               )}
 
               {/* Main PDF Viewer */}
-              <div className="overflow-hidden">
+              <div className="overflow-y-auto h-full">
                 <PDFViewerContent
                   highlights={highlights}
                   onAddHighlight={addHighlight}
@@ -1493,80 +1509,6 @@ export default function App() {
 
         {/* Right sidebar */}
         <aside className="border-l p-3 space-y-4 bg-white overflow-y-auto">
-          {/* Enhanced Page Navigation */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold">Page Navigation</label>
-
-            {/* Button navigation with direct input */}
-            <div className="flex items-center gap-2">
-              <button
-                className="px-2 py-1 text-xs border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => jumpToPage(currentPage - 1)}
-                disabled={currentPage <= 1}
-                aria-label="Previous page"
-                title="Previous page"
-              >
-                ◀
-              </button>
-
-              {/* Direct page input */}
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={pageInputValue}
-                  onChange={(e) => setPageInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const pageNum = parseInt(pageInputValue);
-                      if (pageNum >= 1 && pageNum <= totalPages) {
-                        jumpToPage(pageNum);
-                      }
-                    }
-                  }}
-                  className="w-12 px-2 py-1 border rounded text-center text-xs"
-                  aria-label="Go to page"
-                />
-                <span className="text-xs text-gray-500" data-testid="page-indicator">
-                  {currentPage} / {totalPages}
-                </span>
-              </div>
-
-              <button
-                className="px-2 py-1 text-xs border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => jumpToPage(currentPage + 1)}
-                disabled={currentPage >= totalPages}
-                aria-label="Next page"
-                title="Next page"
-              >
-                ▶
-              </button>
-            </div>
-
-            {/* Quick jump buttons */}
-            <div className="flex gap-1">
-              <button
-                onClick={() => jumpToPage(1)}
-                disabled={currentPage === 1}
-                className="flex-1 text-xs px-2 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Jump to first page"
-                aria-label="Jump to first page"
-              >
-                First
-              </button>
-              <button
-                onClick={() => jumpToPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="flex-1 text-xs px-2 py-1 border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Jump to last page"
-                aria-label="Jump to last page"
-              >
-                Last
-              </button>
-            </div>
-          </div>
-
           {/* Form Type Toggle */}
           <div className="flex items-center gap-2">
             <button
@@ -1611,7 +1553,7 @@ export default function App() {
               <h3 className="font-semibold text-sm">
                 {useSchemaForm
                   ? "Schema Fields"
-                  : `Fields for page ${currentPage}`}
+                  : "Document Fields"}
               </h3>
             </div>
 
@@ -1648,16 +1590,10 @@ export default function App() {
               />
             ) : (
               <>
-                {currentPageTemplate.length === 0 && (
-                  <div className="text-xs text-gray-500">
-                    No fields for this page.
-                  </div>
-                )}
-
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-96 overflow-y-auto">
                   {currentPageTemplate.map((f) => {
-                    const keyField = `${currentPage}:${f.id}`;
-                    const inputId = `field-${currentPage}-${f.id}`;
+                    // Document-level: use field ID directly
+                    const inputId = `field-${f.id}`;
                     return (
                       <div key={f.id} className="space-y-1">
                         <label htmlFor={inputId} className="text-xs">
@@ -1667,7 +1603,7 @@ export default function App() {
                           id={inputId}
                           className="w-full border p-1 rounded text-sm"
                           placeholder={f.placeholder || ""}
-                          value={pageForm[keyField] || ""}
+                          value={pageForm[f.id] || ""}
                           onChange={(e) =>
                             handleTemplateInput(
                               f.id,
