@@ -442,39 +442,35 @@ export function isLabeledHighlight(value: any): value is LabeledHighlight {
  */
 export function isFieldTemplate(value: any): value is FieldTemplate {
   return (
-    value &&
-    typeof value.id === "string" &&
-    typeof value.label === "string"
+    value && typeof value.id === "string" && typeof value.label === "string"
   );
 }
 
 // ==================== LECTOR LIBRARY TYPES ====================
-// Note: These are re-exported from @anaralabs/lector for convenience
-
-/**
- * Lector ColoredHighlight (for ColoredHighlightLayer)
- * @see https://lector-weld.vercel.app/docs/basic-usage
- */
-export interface ColoredHighlight {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color?: string;
-}
+// Note: ColoredHighlight and other Lector types should be imported directly from @anaralabs/lector
+// DO NOT re-define them here as they may change between versions
 
 /**
  * Lector search result match
+ * Note: This is an internal type for tracking search results in our application state
  */
 export interface SearchMatch {
   id: string;
   pageNumber: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
   text: string;
+  matchIndex?: number;
+  rects?: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
+  rect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 /**

@@ -5,6 +5,7 @@ This document describes common code patterns used throughout the Lector Review c
 ---
 
 ## Table of Contents
+
 - [Component Patterns](#component-patterns)
 - [Hook Patterns](#hook-patterns)
 - [Storage Patterns](#storage-patterns)
@@ -19,8 +20,8 @@ This document describes common code patterns used throughout the Lector Review c
 ### Standard Component Structure
 
 ```typescript
-import { useState, useEffect, useCallback } from 'react';
-import type { ComponentProps } from '@/types';
+import { useState, useEffect, useCallback } from "react";
+import type { ComponentProps } from "@/types";
 
 /**
  * Component description
@@ -35,17 +36,26 @@ interface ComponentNameProps {
   children?: React.ReactNode;
 }
 
-export function ComponentName({ prop1, onAction, children }: ComponentNameProps) {
+export function ComponentName({
+  prop1,
+  onAction,
+  children,
+}: ComponentNameProps) {
   // 1. STATE
-  const [localState, setLocalState] = useState<string>('');
+  const [localState, setLocalState] = useState<string>("");
 
   // 2. EFFECTS
-  useEffect(() => {
-    // Effect logic
-    return () => {
-      // Cleanup
-    };
-  }, [/* dependencies */]);
+  useEffect(
+    () => {
+      // Effect logic
+      return () => {
+        // Cleanup
+      };
+    },
+    [
+      /* dependencies */
+    ]
+  );
 
   // 3. HANDLERS
   const handleClick = useCallback(() => {
@@ -53,23 +63,19 @@ export function ComponentName({ prop1, onAction, children }: ComponentNameProps)
       // Logic
       onAction(localState);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
     }
   }, [localState, onAction]);
 
   // 4. RENDER
-  return (
-    <div className="component-wrapper">
-      {children}
-    </div>
-  );
+  return <div className="component-wrapper">{children}</div>;
 }
 ```
 
 ### Modal Dialog Pattern
 
 ```typescript
-import { Modal } from '@/components';
+import { Modal } from "@/components";
 
 // Usage
 function ParentComponent() {
@@ -122,7 +128,7 @@ showToast("Auto-saved", "info", 2000); // 2 seconds
 ### Loading State Pattern
 
 ```typescript
-import { Loading } from '@/components';
+import { Loading } from "@/components";
 
 function DataComponent() {
   const [isLoading, setIsLoading] = useState(true);
@@ -149,7 +155,7 @@ function DataComponent() {
   if (error) return <div className="text-red-600">Error: {error}</div>;
   if (!data) return <div>No data</div>;
 
-  return <div>{ /* Render data */}</div>;
+  return <div>{/* Render data */}</div>;
 }
 ```
 
@@ -187,10 +193,10 @@ export function useCustomHook<T>(initialValue: T) {
 ### Debounce Hook Pattern
 
 ```typescript
-import { useDebounce } from '@/hooks';
+import { useDebounce } from "@/hooks";
 
 function SearchComponent() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearch = useDebounce(searchTerm, 500);
 
   useEffect(() => {
@@ -212,10 +218,10 @@ function SearchComponent() {
 ### LocalStorage Hook Pattern
 
 ```typescript
-const [theme, setTheme] = useLocalStorage('theme', 'light');
+const [theme, setTheme] = useLocalStorage("theme", "light");
 
 // Update
-setTheme('dark');
+setTheme("dark");
 
 // Remove
 setTheme(null);
@@ -224,7 +230,7 @@ setTheme(null);
 ### Undo/Redo Pattern
 
 ```typescript
-import { useUndoRedo } from '@/hooks';
+import { useUndoRedo } from "@/hooks";
 
 function Form() {
   const {
@@ -238,8 +244,12 @@ function Form() {
 
   return (
     <div>
-      <button onClick={undo} disabled={!canUndo}>Undo</button>
-      <button onClick={redo} disabled={!canRedo}>Redo</button>
+      <button onClick={undo} disabled={!canUndo}>
+        Undo
+      </button>
+      <button onClick={redo} disabled={!canRedo}>
+        Redo
+      </button>
       {/* Form fields */}
     </div>
   );
@@ -254,13 +264,17 @@ function Form() {
 
 ```typescript
 // Always use project namespacing
-const key = (project: string, dataType: string) => `proj:${project}:${dataType}`;
+const key = (project: string, dataType: string) =>
+  `proj:${project}:${dataType}`;
 
 // Save
-localStorage.setItem(key(currentProject, 'highlights'), JSON.stringify(highlights));
+localStorage.setItem(
+  key(currentProject, "highlights"),
+  JSON.stringify(highlights)
+);
 
 // Load
-const data = localStorage.getItem(key(currentProject, 'highlights'));
+const data = localStorage.getItem(key(currentProject, "highlights"));
 const highlights = data ? JSON.parse(data) : [];
 ```
 
@@ -271,21 +285,24 @@ const highlights = data ? JSON.parse(data) : [];
 const fieldKey = `${pageNumber}:${fieldId}`;
 
 // Save field
-setPageForm(prev => ({
+setPageForm((prev) => ({
   ...prev,
-  [fieldKey]: value
+  [fieldKey]: value,
 }));
 
 // Get field
-const value = pageForm[fieldKey] || '';
+const value = pageForm[fieldKey] || "";
 
 // Get all fields for page
 const pageFields = Object.keys(pageForm)
-  .filter(key => key.startsWith(`${pageNumber}:`))
-  .reduce((acc, key) => ({
-    ...acc,
-    [key.split(':')[1]]: pageForm[key]
-  }), {});
+  .filter((key) => key.startsWith(`${pageNumber}:`))
+  .reduce(
+    (acc, key) => ({
+      ...acc,
+      [key.split(":")[1]]: pageForm[key],
+    }),
+    {}
+  );
 ```
 
 ### Safe JSON Parse
@@ -297,14 +314,14 @@ function safeJSONParse<T>(json: string | null, defaultValue: T): T {
   try {
     return JSON.parse(json);
   } catch (error) {
-    console.error('JSON parse error:', error);
+    console.error("JSON parse error:", error);
     return defaultValue;
   }
 }
 
 // Usage
 const highlights = safeJSONParse(
-  localStorage.getItem(key('default', 'highlights')),
+  localStorage.getItem(key("default", "highlights")),
   []
 );
 ```
@@ -313,15 +330,18 @@ const highlights = safeJSONParse(
 
 ```typescript
 // ❌ BAD - Multiple writes
-fields.forEach(field => {
+fields.forEach((field) => {
   localStorage.setItem(`proj:${project}:${field.id}`, field.value);
 });
 
 // ✅ GOOD - Single write
-const data = fields.reduce((acc, field) => ({
-  ...acc,
-  [field.id]: field.value
-}), {});
+const data = fields.reduce(
+  (acc, field) => ({
+    ...acc,
+    [field.id]: field.value,
+  }),
+  {}
+);
 localStorage.setItem(`proj:${project}:data`, JSON.stringify(data));
 ```
 
@@ -336,11 +356,11 @@ async function saveData() {
   try {
     setIsLoading(true);
     await performSave();
-    showToast('Data saved successfully!', 'success');
+    showToast("Data saved successfully!", "success");
   } catch (error) {
-    console.error('Save failed:', error);
-    const message = error instanceof Error ? error.message : 'Save failed';
-    showToast(message, 'error');
+    console.error("Save failed:", error);
+    const message = error instanceof Error ? error.message : "Save failed";
+    showToast(message, "error");
   } finally {
     setIsLoading(false);
   }
@@ -364,7 +384,7 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
+    console.error("Error caught by boundary:", error, errorInfo);
   }
 
   render() {
@@ -388,19 +408,19 @@ class ErrorBoundary extends React.Component<
 ### Input Validation Pattern
 
 ```typescript
-import { validateField } from '@/utils/validation';
+import { validateField } from "@/utils/validation";
 
 function handleFieldChange(fieldId: string, value: string) {
   const validation = validateField(fieldId, value);
 
   if (!validation.valid) {
-    showToast(validation.error, 'error');
+    showToast(validation.error, "error");
     return;
   }
 
-  setPageForm(prev => ({
+  setPageForm((prev) => ({
     ...prev,
-    [`${currentPage}:${fieldId}`]: value
+    [`${currentPage}:${fieldId}`]: value,
   }));
 }
 ```
@@ -435,31 +455,33 @@ const baseStyles = "px-4 py-2 rounded font-medium focus:outline-none focus:ring-
 
 ```typescript
 // Always include dark: variants
-className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+className = "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100";
 
 // Hover states with dark mode
-className="hover:bg-gray-100 dark:hover:bg-gray-700"
+className = "hover:bg-gray-100 dark:hover:bg-gray-700";
 
 // Border colors
-className="border-gray-300 dark:border-gray-600"
+className = "border-gray-300 dark:border-gray-600";
 
 // Toggle dark mode
 const { isDark, toggleDark } = useDarkMode();
 
 <button onClick={toggleDark} aria-label="Toggle dark mode">
-  {isDark ? '☀️' : '🌙'}
-</button>
+  {isDark ? "☀️" : "🌙"}
+</button>;
 ```
 
 ### Responsive Layout Pattern
 
 ```typescript
 // Mobile-first approach
-<div className="
+<div
+  className="
   flex flex-col          /* mobile: stack vertically */
   md:flex-row           /* tablet+: horizontal layout */
   lg:gap-6              /* desktop: larger gaps */
-">
+"
+>
   <div className="w-full md:w-1/3">Sidebar</div>
   <div className="w-full md:w-2/3">Content</div>
 </div>
@@ -472,24 +494,24 @@ const { isDark, toggleDark } = useDarkMode();
 ### Unit Test Pattern
 
 ```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from "vitest";
 
-describe('utilityFunction', () => {
+describe("utilityFunction", () => {
   beforeEach(() => {
     // Setup
   });
 
-  it('should handle normal case', () => {
+  it("should handle normal case", () => {
     const result = utilityFunction(input);
     expect(result).toBe(expected);
   });
 
-  it('should handle edge case', () => {
+  it("should handle edge case", () => {
     const result = utilityFunction(edgeCase);
     expect(result).toBeDefined();
   });
 
-  it('should throw on invalid input', () => {
+  it("should throw on invalid input", () => {
     expect(() => utilityFunction(invalid)).toThrow();
   });
 });
@@ -498,19 +520,19 @@ describe('utilityFunction', () => {
 ### Component Test Pattern
 
 ```typescript
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from "@testing-library/react";
 
-describe('Component', () => {
-  it('should render with props', () => {
+describe("Component", () => {
+  it("should render with props", () => {
     render(<Component title="Test" />);
-    expect(screen.getByText('Test')).toBeInTheDocument();
+    expect(screen.getByText("Test")).toBeInTheDocument();
   });
 
-  it('should call handler on click', () => {
+  it("should call handler on click", () => {
     const mockHandler = vi.fn();
     render(<Component onClick={mockHandler} />);
 
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByRole("button"));
     expect(mockHandler).toHaveBeenCalledOnce();
   });
 });
@@ -519,16 +541,16 @@ describe('Component', () => {
 ### E2E Test Pattern
 
 ```typescript
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-test('should complete workflow', async ({ page }) => {
-  await page.goto('http://localhost:5173');
+test("should complete workflow", async ({ page }) => {
+  await page.goto("http://localhost:5173");
   await page.waitForSelector('[data-testid="app-loaded"]');
 
-  await page.fill('[aria-label="Input"]', 'test value');
+  await page.fill('[aria-label="Input"]', "test value");
   await page.click('[aria-label="Submit"]');
 
-  await expect(page.locator('.success-message')).toBeVisible();
+  await expect(page.locator(".success-message")).toBeVisible();
 });
 ```
 
@@ -553,18 +575,23 @@ function PDFViewerContent() {
 
 ```typescript
 // Convert highlights to Lector format
-const lectorHighlights: ColoredHighlight[] = highlights
-  .filter(h => h.pageNumber === currentPage)
-  .map(h => ({
-    id: h.id,
-    x: h.x,
-    y: h.y,
-    width: h.width,
-    height: h.height,
-    color: h.kind === 'search' ? '#FFFF00' : '#FF0000'
-  }));
+// ColoredHighlight requires pageNumber and rects array (not individual x/y/width/height)
+const coloredHighlights: ColoredHighlight[] = highlights.map((h) => ({
+  id: h.id,
+  pageNumber: h.pageNumber,
+  rects: [
+    {
+      x: h.x,
+      y: h.y,
+      width: h.width,
+      height: h.height,
+    },
+  ],
+  color:
+    h.kind === "search" ? "rgba(255, 255, 0, 0.4)" : "rgba(0, 255, 0, 0.3)",
+}));
 
-<ColoredHighlightLayer highlights={lectorHighlights} />
+<ColoredHighlightLayer highlights={coloredHighlights} />;
 ```
 
 ### Search Result Pattern
@@ -572,15 +599,15 @@ const lectorHighlights: ColoredHighlight[] = highlights
 ```typescript
 useEffect(() => {
   if (searchResults?.exactMatches) {
-    const searchHighlights = searchResults.exactMatches.map(match => ({
+    const searchHighlights = searchResults.exactMatches.map((match) => ({
       id: `search-${match.pageNumber}-${match.id}`,
       label: match.text,
-      kind: 'search' as const,
+      kind: "search" as const,
       pageNumber: match.pageNumber,
       x: match.x,
       y: match.y,
       width: match.width,
-      height: match.height
+      height: match.height,
     }));
 
     setHighlights(searchHighlights);

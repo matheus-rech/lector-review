@@ -1,37 +1,38 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { GlobalWorkerOptions } from "pdfjs-dist";
-import "pdfjs-dist/web/pdf_viewer.css";
 import {
-  Root,
-  Pages,
-  Page,
+  // NEW: Utilities
+  calculateHighlightRects,
   CanvasLayer,
-  TextLayer,
   ColoredHighlightLayer,
-  useSelectionDimensions,
+  CurrentZoom,
+  Page,
+  Pages,
+  Root,
+  // NEW: Selection tooltip
+  SelectionTooltip,
+  TextLayer,
+  Thumbnail,
+  // NEW: Thumbnail navigation
+  Thumbnails,
+  usePdf,
   usePdfJump,
   usePDFPageNumber,
   useSearch,
-  usePdf,
-  type ColoredHighlight,
+  useSelectionDimensions,
   // NEW: Zoom controls
   ZoomIn,
   ZoomOut,
-  CurrentZoom,
-  // NEW: Thumbnail navigation
-  Thumbnails,
-  Thumbnail,
-  // NEW: Selection tooltip
-  SelectionTooltip,
-  // NEW: Utilities
-  calculateHighlightRects,
+  type ColoredHighlight,
 } from "@anaralabs/lector";
-import { Toast, useToast } from "./components/Toast";
-import { Modal, InputModal, ConfirmModal } from "./components/Modal";
-import { PDFUpload, PDFList } from "./components";
-import { TemplateManager } from "./components/TemplateManager";
+import { GlobalWorkerOptions } from "pdfjs-dist";
+import "pdfjs-dist/web/pdf_viewer.css";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { PDFList, PDFUpload } from "./components";
+import { ConfirmModal, InputModal } from "./components/Modal";
 import { SchemaForm } from "./components/SchemaForm";
+import { TemplateManager } from "./components/TemplateManager";
+import { Toast, useToast } from "./components/Toast";
 import { usePDFManager } from "./hooks/usePDFManager";
+import type { SearchMatch } from "./types";
 import { parseSchema } from "./utils/schemaParser";
 
 // Configure PDF.js worker
@@ -61,32 +62,84 @@ const uid = () => `h${++uidCounter}`;
 /** ---------- Default Templates for Systematic Review ---------- */
 const defaultTemplates: Record<number, FieldTemplate[]> = {
   1: [
-    { id: "study_id", label: "Study ID (DOI/PMID)", placeholder: "e.g., 10.1161/STROKEAHA.116.014078" },
+    {
+      id: "study_id",
+      label: "Study ID (DOI/PMID)",
+      placeholder: "e.g., 10.1161/STROKEAHA.116.014078",
+    },
     { id: "first_author", label: "First Author", placeholder: "e.g., Kim" },
     { id: "year", label: "Year of Publication", placeholder: "e.g., 2016" },
-    { id: "country", label: "Country", placeholder: "e.g., Korea" }
+    { id: "country", label: "Country", placeholder: "e.g., Korea" },
   ],
   2: [
-    { id: "research_question", label: "Research Question", placeholder: "Primary research question" },
-    { id: "study_design", label: "Study Design", placeholder: "e.g., Retrospective-Matched Case-Control" },
-    { id: "control_definition", label: "Control Group Definition", placeholder: "How was control defined?" }
+    {
+      id: "research_question",
+      label: "Research Question",
+      placeholder: "Primary research question",
+    },
+    {
+      id: "study_design",
+      label: "Study Design",
+      placeholder: "e.g., Retrospective-Matched Case-Control",
+    },
+    {
+      id: "control_definition",
+      label: "Control Group Definition",
+      placeholder: "How was control defined?",
+    },
   ],
   3: [
-    { id: "total_patients", label: "Total Patients (N)", placeholder: "e.g., 112" },
-    { id: "intervention_size", label: "Intervention Group Size", placeholder: "e.g., 28" },
-    { id: "control_size", label: "Control Group Size", placeholder: "e.g., 56" }
+    {
+      id: "total_patients",
+      label: "Total Patients (N)",
+      placeholder: "e.g., 112",
+    },
+    {
+      id: "intervention_size",
+      label: "Intervention Group Size",
+      placeholder: "e.g., 28",
+    },
+    {
+      id: "control_size",
+      label: "Control Group Size",
+      placeholder: "e.g., 56",
+    },
   ],
   4: [
-    { id: "age_mean", label: "Age (Mean ± SD)", placeholder: "e.g., 59.0 ± 11.6" },
-    { id: "gender_male_pct", label: "Gender (% Male)", placeholder: "e.g., 64.3%" },
-    { id: "baseline_status", label: "Baseline Neurological Status", placeholder: "e.g., GCS score, NIHSS" }
+    {
+      id: "age_mean",
+      label: "Age (Mean ± SD)",
+      placeholder: "e.g., 59.0 ± 11.6",
+    },
+    {
+      id: "gender_male_pct",
+      label: "Gender (% Male)",
+      placeholder: "e.g., 64.3%",
+    },
+    {
+      id: "baseline_status",
+      label: "Baseline Neurological Status",
+      placeholder: "e.g., GCS score, NIHSS",
+    },
   ],
   5: [
-    { id: "primary_outcome", label: "Primary Outcome", placeholder: "e.g., mRS 0-2 at 12 months" },
-    { id: "effect_measure", label: "Effect Measure (OR/RR/HR)", placeholder: "e.g., OR 4.815" },
-    { id: "confidence_interval", label: "95% CI", placeholder: "e.g., [1.45, 3.78]" },
-    { id: "p_value", label: "P-value", placeholder: "e.g., 0.009" }
-  ]
+    {
+      id: "primary_outcome",
+      label: "Primary Outcome",
+      placeholder: "e.g., mRS 0-2 at 12 months",
+    },
+    {
+      id: "effect_measure",
+      label: "Effect Measure (OR/RR/HR)",
+      placeholder: "e.g., OR 4.815",
+    },
+    {
+      id: "confidence_interval",
+      label: "95% CI",
+      placeholder: "e.g., [1.45, 3.78]",
+    },
+    { id: "p_value", label: "P-value", placeholder: "e.g., 0.009" },
+  ],
 };
 
 /** ---------- PDF Viewer Component (inside Root context) ---------- */
@@ -107,13 +160,20 @@ function PDFViewerContent({
   onSearchResultsChange: (count: number) => void;
   onUpdateSearchHighlights: (searchHighlights: LabeledHighlight[]) => void;
   onPageChange: (page: number, total: number) => void;
-  onJumpToPageReady: (jumpFn: (page: number, options?: { behavior: "auto" }) => void) => void;
-  onSearchResultsData: (results: any[]) => void;
-  onRequestHighlightLabel: (rect: Rect, pageNumber: number, defaultLabel: string, onConfirm: (label: string) => void) => void;
+  onJumpToPageReady: (
+    jumpFn: (page: number, options?: { behavior: "auto" }) => void
+  ) => void;
+  onSearchResultsData: (results: SearchMatch[]) => void;
+  onRequestHighlightLabel: (
+    rect: Rect,
+    pageNumber: number,
+    defaultLabel: string,
+    onConfirm: (label: string) => void
+  ) => void;
 }) {
   // Use Lector hooks
   const selectionDimensions = useSelectionDimensions();
-  const { jumpToPage, jumpToHighlightRects } = usePdfJump();
+  const { jumpToPage } = usePdfJump();
   const currentPageNumber = usePDFPageNumber();
   const pdf = usePdf();
   // Access getPdfPageProxy safely through the pdf object
@@ -125,23 +185,11 @@ function PDFViewerContent({
 
   // Expose jumpToPage function to parent once on mount
   useEffect(() => {
-    console.log('[PDFViewerContent] useEffect triggered - jumpToPage available:', !!jumpToPage, 'hasSetupJumpToPage:', hasSetupJumpToPage.current);
     if (jumpToPage && !hasSetupJumpToPage.current) {
-      console.log('[PDFViewerContent] Calling onJumpToPageReady with jumpToPage function');
       onJumpToPageReady(jumpToPage);
       hasSetupJumpToPage.current = true;
-      console.log('[PDFViewerContent] onJumpToPageReady called successfully, hasSetupJumpToPage set to true');
-    } else if (!jumpToPage) {
-      console.warn('[PDFViewerContent] jumpToPage is undefined/null, cannot call onJumpToPageReady');
-    } else {
-      console.log('[PDFViewerContent] jumpToPage already set up, skipping onJumpToPageReady call');
     }
   }, [jumpToPage, onJumpToPageReady]);
-
-  // Debug: Log when jumpToPage is available
-  useEffect(() => {
-    console.log('[PDFViewerContent] State - jumpToPage:', !!jumpToPage, 'currentPage:', currentPageNumber, 'totalPages:', totalPages);
-  }, [jumpToPage, currentPageNumber, totalPages]);
 
   // Notify parent of page changes
   useEffect(() => {
@@ -188,23 +236,36 @@ function PDFViewerContent({
               });
 
               // Convert accurate rects to our highlight format
-              rects.forEach((rect) => {
-                searchHighlights.push({
-                  id: `search-${index}-${searchHighlights.length}-${Date.now()}`,
-                  label: `Search: "${searchTerm}"`,
-                  kind: "search" as const,
-                  pageNumber: rect.pageNumber,
-                  x: rect.left,
-                  y: rect.top,
-                  width: rect.width,
-                  height: rect.height,
-                });
-              });
+              rects.forEach(
+                (rect: {
+                  pageNumber: number;
+                  left: number;
+                  top: number;
+                  width: number;
+                  height: number;
+                }) => {
+                  searchHighlights.push({
+                    id: `search-${index}-${
+                      searchHighlights.length
+                    }-${Date.now()}`,
+                    label: `Search: "${searchTerm}"`,
+                    kind: "search" as const,
+                    pageNumber: rect.pageNumber,
+                    x: rect.left,
+                    y: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                  });
+                }
+              );
             } else {
               // Fallback to manual extraction if page proxy unavailable
-              const rect = match.rects && match.rects[0] ? match.rects[0] :
-                           match.rect ? match.rect :
-                           { x: 100, y: 100, width: 200, height: 20 };
+              const rect =
+                match.rects && match.rects[0]
+                  ? match.rects[0]
+                  : match.rect
+                  ? match.rect
+                  : { x: 100, y: 100, width: 200, height: 20 };
 
               searchHighlights.push({
                 id: `search-${index}-${Date.now()}`,
@@ -218,12 +279,18 @@ function PDFViewerContent({
               });
             }
           } catch (error) {
-            console.error('Failed to calculate highlight rects for match:', error);
+            console.error(
+              "Failed to calculate highlight rects for match:",
+              error
+            );
 
             // Fallback to manual extraction on error
-            const rect = match.rects && match.rects[0] ? match.rects[0] :
-                         match.rect ? match.rect :
-                         { x: 100, y: 100, width: 200, height: 20 };
+            const rect =
+              match.rects && match.rects[0]
+                ? match.rects[0]
+                : match.rect
+                ? match.rect
+                : { x: 100, y: 100, width: 200, height: 20 };
 
             searchHighlights.push({
               id: `search-${index}-${Date.now()}`,
@@ -253,15 +320,26 @@ function PDFViewerContent({
       onSearchResultsChange(0);
       onSearchResultsData([]);
     }
-  }, [searchResults, searchTerm, pdf, onSearchResultsChange, onSearchResultsData, onUpdateSearchHighlights]);
+  }, [
+    searchResults,
+    searchTerm,
+    pdf,
+    onSearchResultsChange,
+    onSearchResultsData,
+    onUpdateSearchHighlights,
+  ]);
 
   // Handle text selection - store pending selection
   useEffect(() => {
-    if (selectionDimensions && selectionDimensions.rects && selectionDimensions.rects.length > 0) {
+    if (
+      selectionDimensions &&
+      selectionDimensions.rects &&
+      selectionDimensions.rects.length > 0
+    ) {
       setPendingSelection({
         rects: selectionDimensions.rects,
         pageNumber: currentPageNumber || 1,
-        text: selectionDimensions.text || ""
+        text: selectionDimensions.text || "",
       });
     }
   }, [selectionDimensions, currentPageNumber]);
@@ -271,10 +349,15 @@ function PDFViewerContent({
     if (pendingSelection) {
       const rect = pendingSelection.rects[0];
       const defaultLabel = pendingSelection.text.substring(0, 50);
-      onRequestHighlightLabel(rect, pendingSelection.pageNumber, defaultLabel, (label) => {
-        onAddHighlight(rect, pendingSelection.pageNumber, label);
-        setPendingSelection(null);
-      });
+      onRequestHighlightLabel(
+        rect,
+        pendingSelection.pageNumber,
+        defaultLabel,
+        (label) => {
+          onAddHighlight(rect, pendingSelection.pageNumber, label);
+          setPendingSelection(null);
+        }
+      );
     }
   }, [pendingSelection, onAddHighlight, onRequestHighlightLabel]);
 
@@ -282,13 +365,16 @@ function PDFViewerContent({
   const coloredHighlights: ColoredHighlight[] = highlights.map((h) => ({
     id: h.id,
     pageNumber: h.pageNumber,
-    rects: [{
-      x: h.x,
-      y: h.y,
-      width: h.width,
-      height: h.height,
-    }],
-    color: h.kind === "search" ? "rgba(255, 255, 0, 0.4)" : "rgba(0, 255, 0, 0.3)",
+    rects: [
+      {
+        x: h.x,
+        y: h.y,
+        width: h.width,
+        height: h.height,
+      },
+    ],
+    color:
+      h.kind === "search" ? "rgba(255, 255, 0, 0.4)" : "rgba(0, 255, 0, 0.3)",
   }));
 
   return (
@@ -356,7 +442,6 @@ export default function App() {
   const {
     pdfs,
     currentPdfId,
-    currentPDF,
     setCurrentPdfId,
     uploadPDF,
     removePDF,
@@ -400,7 +485,7 @@ export default function App() {
   /** Search */
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResultCount, setSearchResultCount] = useState(0);
-  const [searchResultsData, setSearchResultsData] = useState<any[]>([]);
+  const [searchResultsData, setSearchResultsData] = useState<SearchMatch[]>([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
 
   /** Highlights */
@@ -410,10 +495,12 @@ export default function App() {
   });
 
   /** Field Templates */
-  const [templates, setTemplates] = useState<Record<number, FieldTemplate[]>>(() => {
-    const saved = localStorage.getItem(`proj:${currentProject}:templates`);
-    return saved ? JSON.parse(saved) : defaultTemplates;
-  });
+  const [templates, setTemplates] = useState<Record<number, FieldTemplate[]>>(
+    () => {
+      const saved = localStorage.getItem(`proj:${currentProject}:templates`);
+      return saved ? JSON.parse(saved) : defaultTemplates;
+    }
+  );
 
   /** Page Form Data */
   const [pageForm, setPageForm] = useState<Record<string, string>>(() => {
@@ -425,13 +512,15 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(9);
   const [pageInputValue, setPageInputValue] = useState("1");
-  const jumpToPageFn = useRef<((page: number, options?: { behavior: "auto" }) => void) | null>(null);
+  const jumpToPageFn = useRef<
+    ((page: number, options?: { behavior: "auto" }) => void) | null
+  >(null);
   const [isJumpToPageReady, setIsJumpToPageReady] = useState(false);
 
   /** Input Modal State */
   const [inputModalState, setInputModalState] = useState<{
     isOpen: boolean;
-    type: 'highlight' | 'project' | 'relabel' | null;
+    type: "highlight" | "project" | "relabel" | null;
     title: string;
     message: string;
     defaultValue: string;
@@ -439,9 +528,9 @@ export default function App() {
   }>({
     isOpen: false,
     type: null,
-    title: '',
-    message: '',
-    defaultValue: '',
+    title: "",
+    message: "",
+    defaultValue: "",
     onConfirm: () => {},
   });
 
@@ -451,13 +540,13 @@ export default function App() {
     title: string;
     message: string;
     onConfirm: () => void;
-    type?: 'info' | 'warning' | 'danger';
+    type?: "info" | "warning" | "danger";
   }>({
     isOpen: false,
-    title: '',
-    message: '',
+    title: "",
+    message: "",
     onConfirm: () => {},
-    type: 'info',
+    type: "info",
   });
 
   // Sync page input with current page
@@ -466,15 +555,18 @@ export default function App() {
   }, [currentPage]);
 
   /** Handle jumpToPage ready from PDFViewerContent */
-  const handleJumpToPageReady = useCallback((jumpFn: (page: number, options?: { behavior: "auto" }) => void) => {
-    console.log('[App.handleJumpToPageReady] Received jumpFn from PDFViewerContent');
-    jumpToPageFn.current = jumpFn;
-    setIsJumpToPageReady(true);
-    console.log('[App.handleJumpToPageReady] jumpToPageFn.current is now set, isJumpToPageReady=true');
-  }, []);
+  const handleJumpToPageReady = useCallback(
+    (jumpFn: (page: number, options?: { behavior: "auto" }) => void) => {
+      jumpToPageFn.current = jumpFn;
+      setIsJumpToPageReady(true);
+    },
+    []
+  );
 
   // Schema parsing
-  const [parsedSchema, setParsedSchema] = useState<ReturnType<typeof parseSchema> | null>(null);
+  const [parsedSchema, setParsedSchema] = useState<ReturnType<
+    typeof parseSchema
+  > | null>(null);
   const [useSchemaForm, setUseSchemaForm] = useState(false);
 
   // Template Manager modal
@@ -488,17 +580,17 @@ export default function App() {
     const loadSchema = async () => {
       try {
         // Load schema dynamically to avoid build-time issues
-        const response = await fetch('/schema.json');
+        const response = await fetch("/schema.json");
         if (response.ok) {
           const schema = await response.json();
           const parsed = parseSchema(schema);
           setParsedSchema(parsed);
         } else {
-          console.warn('Schema.json not found, schema forms will be disabled');
+          console.warn("Schema.json not found, schema forms will be disabled");
         }
       } catch (err) {
-        console.error('Schema parse error:', err);
-        error('Failed to load schema');
+        console.error("Schema parse error:", err);
+        error("Failed to load schema");
       }
     };
     loadSchema();
@@ -511,15 +603,24 @@ export default function App() {
   }, [projects]);
 
   useEffect(() => {
-    localStorage.setItem(`proj:${currentProject}:highlights`, JSON.stringify(highlights));
+    localStorage.setItem(
+      `proj:${currentProject}:highlights`,
+      JSON.stringify(highlights)
+    );
   }, [currentProject, highlights]);
 
   useEffect(() => {
-    localStorage.setItem(`proj:${currentProject}:templates`, JSON.stringify(templates));
+    localStorage.setItem(
+      `proj:${currentProject}:templates`,
+      JSON.stringify(templates)
+    );
   }, [currentProject, templates]);
 
   useEffect(() => {
-    localStorage.setItem(`proj:${currentProject}:pageForm`, JSON.stringify(pageForm));
+    localStorage.setItem(
+      `proj:${currentProject}:pageForm`,
+      JSON.stringify(pageForm)
+    );
   }, [currentProject, pageForm]);
 
   /** Handle page change from PDFViewerContent */
@@ -534,7 +635,9 @@ export default function App() {
     const savedHighlights = localStorage.getItem(`proj:${proj}:highlights`);
     setHighlights(savedHighlights ? JSON.parse(savedHighlights) : []);
     const savedTemplates = localStorage.getItem(`proj:${proj}:templates`);
-    setTemplates(savedTemplates ? JSON.parse(savedTemplates) : defaultTemplates);
+    setTemplates(
+      savedTemplates ? JSON.parse(savedTemplates) : defaultTemplates
+    );
     const savedForm = localStorage.getItem(`proj:${proj}:pageForm`);
     setPageForm(savedForm ? JSON.parse(savedForm) : {});
     success(`Switched to project: ${proj}`);
@@ -544,10 +647,10 @@ export default function App() {
   const addProject = () => {
     setInputModalState({
       isOpen: true,
-      type: 'project',
-      title: 'Create New Project',
-      message: 'Enter a name for the new project:',
-      defaultValue: '',
+      type: "project",
+      title: "Create New Project",
+      message: "Enter a name for the new project:",
+      defaultValue: "",
       onConfirm: (name) => {
         if (!projects.includes(name)) {
           setProjects([...projects, name]);
@@ -556,7 +659,7 @@ export default function App() {
         } else {
           error("Project name already exists");
         }
-        setInputModalState(prev => ({ ...prev, isOpen: false }));
+        setInputModalState((prev) => ({ ...prev, isOpen: false }));
       },
     });
   };
@@ -568,9 +671,9 @@ export default function App() {
     }
     setConfirmModalState({
       isOpen: true,
-      title: 'Delete Project',
+      title: "Delete Project",
       message: `Are you sure you want to delete project "${currentProject}"? This action cannot be undone.`,
-      type: 'danger',
+      type: "danger",
       onConfirm: () => {
         const newProjects = projects.filter((p) => p !== currentProject);
         setProjects(newProjects);
@@ -579,7 +682,7 @@ export default function App() {
         localStorage.removeItem(`proj:${currentProject}:pageForm`);
         switchProject("default");
         success(`Project "${currentProject}" deleted`);
-        setConfirmModalState(prev => ({ ...prev, isOpen: false }));
+        setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
       },
     });
   };
@@ -606,16 +709,16 @@ export default function App() {
     if (!h) return;
     setInputModalState({
       isOpen: true,
-      type: 'relabel',
-      title: 'Edit Highlight Label',
-      message: 'Enter a new label for this highlight:',
+      type: "relabel",
+      title: "Edit Highlight Label",
+      message: "Enter a new label for this highlight:",
       defaultValue: h.label,
       onConfirm: (newLabel) => {
         setHighlights((prev) =>
           prev.map((x) => (x.id === id ? { ...x, label: newLabel } : x))
         );
         success("Highlight updated");
-        setInputModalState(prev => ({ ...prev, isOpen: false }));
+        setInputModalState((prev) => ({ ...prev, isOpen: false }));
       },
     });
   };
@@ -627,43 +730,45 @@ export default function App() {
   };
 
   /** Request highlight label - opens modal */
-  const handleRequestHighlightLabel = useCallback((rect: Rect, pageNumber: number, defaultLabel: string, onConfirm: (label: string) => void) => {
-    setInputModalState({
-      isOpen: true,
-      type: 'highlight',
-      title: 'Create Highlight',
-      message: 'Enter a label for this highlight:',
-      defaultValue: defaultLabel,
-      onConfirm: (label) => {
-        onConfirm(label);
-        setInputModalState(prev => ({ ...prev, isOpen: false }));
-      },
-    });
-  }, []);
+  const handleRequestHighlightLabel = useCallback(
+    (
+      _rect: Rect,
+      _pageNumber: number,
+      defaultLabel: string,
+      onConfirm: (label: string) => void
+    ) => {
+      setInputModalState({
+        isOpen: true,
+        type: "highlight",
+        title: "Create Highlight",
+        message: "Enter a label for this highlight:",
+        defaultValue: defaultLabel,
+        onConfirm: (label) => {
+          onConfirm(label);
+          setInputModalState((prev) => ({ ...prev, isOpen: false }));
+        },
+      });
+    },
+    []
+  );
 
   /** Jump to page */
-  const jumpToPage = useCallback((page: number) => {
-    console.log('[App.jumpToPage] Called with page:', page, 'totalPages:', totalPages, 'isReady:', isJumpToPageReady);
-    console.log('[App.jumpToPage] jumpToPageFn.current:', jumpToPageFn.current);
-
-    if (page < 1 || page > totalPages) {
-      console.log('[App.jumpToPage] Page out of bounds, returning');
-      return;
-    }
-
-    if (jumpToPageFn.current) {
-      console.log('[App.jumpToPage] Calling Lector jumpToPage with page:', page);
-      try {
-        jumpToPageFn.current(page, { behavior: "auto" });
-        console.log('[App.jumpToPage] Lector jumpToPage called successfully');
-      } catch (err) {
-        console.error('[App.jumpToPage] Error calling Lector jumpToPage:', err);
+  const jumpToPage = useCallback(
+    (page: number) => {
+      if (page < 1 || page > totalPages) {
+        return;
       }
-    } else {
-      console.warn('[App.jumpToPage] jumpToPageFn.current is NULL - Lector hook not ready!');
-      console.warn('[App.jumpToPage] This means navigation will NOT work');
-    }
-  }, [totalPages, isJumpToPageReady]);
+
+      if (jumpToPageFn.current) {
+        try {
+          jumpToPageFn.current(page, { behavior: "auto" });
+        } catch (err) {
+          console.error("Error navigating to page:", err);
+        }
+      }
+    },
+    [totalPages, isJumpToPageReady]
+  );
 
   /** PDF Upload handlers */
   const handlePDFUpload = async (file: File) => {
@@ -700,7 +805,11 @@ export default function App() {
 
   /** Template input */
   const currentPageTemplate = templates[currentPage] || [];
-  const handleTemplateInput = (fieldId: string, value: string, page: number) => {
+  const handleTemplateInput = (
+    fieldId: string,
+    value: string,
+    page: number
+  ) => {
     const key = `${page}:${fieldId}`;
     setPageForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -713,7 +822,9 @@ export default function App() {
   };
 
   /** Template Manager handlers */
-  const handleSaveTemplates = (newTemplates: Record<number, FieldTemplate[]>) => {
+  const handleSaveTemplates = (
+    newTemplates: Record<number, FieldTemplate[]>
+  ) => {
     setTemplates(newTemplates);
     success("Templates saved");
     setShowTemplateManager(false);
@@ -744,11 +855,25 @@ export default function App() {
   /** Export CSV */
   const exportCSV = () => {
     const rows = [
-      ["Project", "Page", "Field", "Value", "Highlight Label", "Highlight Page"],
+      [
+        "Project",
+        "Page",
+        "Field",
+        "Value",
+        "Highlight Label",
+        "Highlight Page",
+      ],
     ];
     Object.entries(pageForm).forEach(([key, value]) => {
       const [page, field] = key.split(":");
-      rows.push([currentProject, page || "", field || "", String(value || ""), "", ""]);
+      rows.push([
+        currentProject,
+        page || "",
+        field || "",
+        String(value || ""),
+        "",
+        "",
+      ]);
     });
     highlights.forEach((h) => {
       rows.push([currentProject, "", "", "", h.label, String(h.pageNumber)]);
@@ -765,27 +890,33 @@ export default function App() {
   };
 
   /** Handle search highlights from PDFViewerContent */
-  const handleSearchHighlights = useCallback((searchHighlights: LabeledHighlight[]) => {
-    setHighlights((prev) => {
-      const userHighlights = prev.filter((h) => h.kind !== "search");
-      return [...userHighlights, ...searchHighlights];
-    });
-  }, []);
+  const handleSearchHighlights = useCallback(
+    (searchHighlights: LabeledHighlight[]) => {
+      setHighlights((prev) => {
+        const userHighlights = prev.filter((h) => h.kind !== "search");
+        return [...userHighlights, ...searchHighlights];
+      });
+    },
+    []
+  );
 
   /** Handle search results data */
-  const handleSearchResultsData = useCallback((results: any[]) => {
+  const handleSearchResultsData = useCallback((results: SearchMatch[]) => {
     setSearchResultsData(results);
     setCurrentSearchIndex(0); // Reset to first result
   }, []);
 
   /** Navigate to specific search result */
-  const jumpToSearchResult = useCallback((index: number) => {
-    if (searchResultsData[index] && jumpToPageFn.current) {
-      const result = searchResultsData[index];
-      jumpToPageFn.current(result.pageNumber);
-      setCurrentSearchIndex(index);
-    }
-  }, [searchResultsData]);
+  const jumpToSearchResult = useCallback(
+    (index: number) => {
+      if (searchResultsData[index] && jumpToPageFn.current) {
+        const result = searchResultsData[index];
+        jumpToPageFn.current(result.pageNumber);
+        setCurrentSearchIndex(index);
+      }
+    },
+    [searchResultsData]
+  );
 
   /** Navigate to next search result */
   const nextSearchResult = useCallback(() => {
@@ -798,7 +929,9 @@ export default function App() {
   /** Navigate to previous search result */
   const prevSearchResult = useCallback(() => {
     if (searchResultsData.length > 0) {
-      const prevIndex = (currentSearchIndex - 1 + searchResultsData.length) % searchResultsData.length;
+      const prevIndex =
+        (currentSearchIndex - 1 + searchResultsData.length) %
+        searchResultsData.length;
       jumpToSearchResult(prevIndex);
     }
   }, [currentSearchIndex, searchResultsData.length, jumpToSearchResult]);
@@ -818,7 +951,9 @@ export default function App() {
       {/* Input Modal */}
       <InputModal
         isOpen={inputModalState.isOpen}
-        onClose={() => setInputModalState(prev => ({ ...prev, isOpen: false }))}
+        onClose={() =>
+          setInputModalState((prev) => ({ ...prev, isOpen: false }))
+        }
         title={inputModalState.title}
         message={inputModalState.message}
         defaultValue={inputModalState.defaultValue}
@@ -829,7 +964,9 @@ export default function App() {
       {/* Confirm Modal */}
       <ConfirmModal
         isOpen={confirmModalState.isOpen}
-        onClose={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))}
+        onClose={() =>
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }))
+        }
         title={confirmModalState.title}
         message={confirmModalState.message}
         onConfirm={confirmModalState.onConfirm}
@@ -853,10 +990,18 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <button className="px-2 border rounded" onClick={addProject} aria-label="Add project">
+            <button
+              className="px-2 border rounded"
+              onClick={addProject}
+              aria-label="Add project"
+            >
               +
             </button>
-            <button className="px-2 border rounded" onClick={deleteProject} aria-label="Delete project">
+            <button
+              className="px-2 border rounded"
+              onClick={deleteProject}
+              aria-label="Delete project"
+            >
               🗑
             </button>
           </div>
@@ -930,20 +1075,24 @@ export default function App() {
 
               {/* Results List */}
               <div className="max-h-40 overflow-y-auto border rounded text-xs bg-white">
-                {searchResultsData.slice(0, 10).map((result: any, index: number) => (
-                  <div
-                    key={index}
-                    onClick={() => jumpToSearchResult(index)}
-                    className={`p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 ${
-                      index === currentSearchIndex ? 'bg-blue-100' : ''
-                    }`}
-                  >
-                    <div className="font-medium text-blue-700">Page {result.pageNumber}</div>
-                    <div className="text-gray-600 truncate">
-                      {result.text?.substring(0, 60) || 'Match found'}...
+                {searchResultsData
+                  .slice(0, 10)
+                  .map((result: any, index: number) => (
+                    <div
+                      key={index}
+                      onClick={() => jumpToSearchResult(index)}
+                      className={`p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0 ${
+                        index === currentSearchIndex ? "bg-blue-100" : ""
+                      }`}
+                    >
+                      <div className="font-medium text-blue-700">
+                        Page {result.pageNumber}
+                      </div>
+                      <div className="text-gray-600 truncate">
+                        {result.text?.substring(0, 60) || "Match found"}...
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
                 {searchResultsData.length > 10 && (
                   <div className="p-2 text-center text-gray-500 italic">
                     Showing first 10 of {searchResultCount} results
@@ -956,10 +1105,18 @@ export default function App() {
 
         {/* Export */}
         <div className="space-x-2">
-          <button onClick={exportJSON} className="text-sm bg-green-200 px-2 py-1 rounded hover:bg-green-300" aria-label="Export JSON">
+          <button
+            onClick={exportJSON}
+            className="text-sm bg-green-200 px-2 py-1 rounded hover:bg-green-300"
+            aria-label="Export JSON"
+          >
             Export JSON
           </button>
-          <button onClick={exportCSV} className="text-sm bg-red-200 px-2 py-1 rounded hover:bg-red-300" aria-label="Export CSV">
+          <button
+            onClick={exportCSV}
+            className="text-sm bg-red-200 px-2 py-1 rounded hover:bg-red-300"
+            aria-label="Export CSV"
+          >
             Export CSV
           </button>
         </div>
@@ -970,7 +1127,11 @@ export default function App() {
         {/* PDF Viewer with Thumbnails and Zoom Controls */}
         <div className="overflow-hidden flex flex-col">
           {/* PDF Viewer Grid with Optional Thumbnails - SINGLE Root wrapping everything */}
-          <Root source={pdfSource} className="flex-1 flex flex-col" zoomOptions={{ minZoom: 0.5, maxZoom: 3 }}>
+          <Root
+            source={pdfSource}
+            className="flex-1 flex flex-col"
+            zoomOptions={{ minZoom: 0.5, maxZoom: 3 }}
+          >
             {/* Zoom Controls Bar - NOW INSIDE ROOT */}
             <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
               <div className="flex items-center gap-2">
@@ -979,7 +1140,7 @@ export default function App() {
                   className="px-3 py-1 text-sm border rounded hover:bg-gray-200"
                   title="Toggle thumbnails"
                 >
-                  {showThumbnails ? '◀ Hide' : '▶ Show'} Thumbnails
+                  {showThumbnails ? "◀ Hide" : "▶ Show"} Thumbnails
                 </button>
               </div>
 
@@ -991,7 +1152,11 @@ export default function App() {
             </div>
 
             {/* PDF Content Grid */}
-            <div className={`flex-1 grid ${showThumbnails ? 'grid-cols-[200px_1fr]' : 'grid-cols-[0_1fr]'} transition-all duration-300`}>
+            <div
+              className={`flex-1 grid ${
+                showThumbnails ? "grid-cols-[200px_1fr]" : "grid-cols-[0_1fr]"
+              } transition-all duration-300`}
+            >
               {/* Thumbnails Sidebar */}
               {showThumbnails && (
                 <div className="border-r bg-gray-50 overflow-y-auto">
@@ -1046,7 +1211,7 @@ export default function App() {
                   value={pageInputValue}
                   onChange={(e) => setPageInputValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (e.key === "Enter") {
                       const pageNum = parseInt(pageInputValue);
                       if (pageNum >= 1 && pageNum <= totalPages) {
                         jumpToPage(pageNum);
@@ -1056,7 +1221,9 @@ export default function App() {
                   className="w-12 px-2 py-1 border rounded text-center text-xs"
                   aria-label="Go to page"
                 />
-                <span className="text-xs text-gray-500">{currentPage} / {totalPages}</span>
+                <span className="text-xs text-gray-500">
+                  {currentPage} / {totalPages}
+                </span>
               </div>
 
               <button
@@ -1095,7 +1262,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               className={`flex-1 px-3 py-2 text-xs border rounded ${
-                !useSchemaForm ? 'bg-blue-500 text-white' : 'bg-gray-100'
+                !useSchemaForm ? "bg-blue-500 text-white" : "bg-gray-100"
               }`}
               onClick={() => setUseSchemaForm(false)}
             >
@@ -1103,7 +1270,7 @@ export default function App() {
             </button>
             <button
               className={`flex-1 px-3 py-2 text-xs border rounded ${
-                useSchemaForm ? 'bg-blue-500 text-white' : 'bg-gray-100'
+                useSchemaForm ? "bg-blue-500 text-white" : "bg-gray-100"
               }`}
               onClick={() => setUseSchemaForm(true)}
             >
@@ -1129,7 +1296,9 @@ export default function App() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-sm">
-                {useSchemaForm ? 'Schema Fields' : `Fields for page ${currentPage}`}
+                {useSchemaForm
+                  ? "Schema Fields"
+                  : `Fields for page ${currentPage}`}
               </h3>
             </div>
 
@@ -1146,7 +1315,9 @@ export default function App() {
             ) : (
               <>
                 {currentPageTemplate.length === 0 && (
-                  <div className="text-xs text-gray-500">No fields for this page.</div>
+                  <div className="text-xs text-gray-500">
+                    No fields for this page.
+                  </div>
                 )}
 
                 <div className="space-y-2">
@@ -1159,7 +1330,13 @@ export default function App() {
                           className="w-full border p-1 rounded text-sm"
                           placeholder={f.placeholder || ""}
                           value={pageForm[keyField] || ""}
-                          onChange={(e) => handleTemplateInput(f.id, e.target.value, currentPage)}
+                          onChange={(e) =>
+                            handleTemplateInput(
+                              f.id,
+                              e.target.value,
+                              currentPage
+                            )
+                          }
                         />
                       </div>
                     );
@@ -1176,16 +1353,28 @@ export default function App() {
             </div>
             <ul className="text-sm divide-y max-h-56 overflow-auto">
               {highlights.length === 0 && (
-                <li className="text-xs text-gray-500 py-2">No highlights yet. Select text in the PDF to create highlights.</li>
+                <li className="text-xs text-gray-500 py-2">
+                  No highlights yet. Select text in the PDF to create
+                  highlights.
+                </li>
               )}
               {highlights.map((h) => (
-                <li key={h.id} className="py-2 flex items-center justify-between">
+                <li
+                  key={h.id}
+                  className="py-2 flex items-center justify-between"
+                >
                   <div>
                     <div className="font-medium text-xs flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded ${h.kind === 'search' ? 'bg-yellow-400' : 'bg-green-400'}`}></span>
+                      <span
+                        className={`w-3 h-3 rounded ${
+                          h.kind === "search" ? "bg-yellow-400" : "bg-green-400"
+                        }`}
+                      ></span>
                       {h.label}
                     </div>
-                    <div className="text-xs text-gray-500">p.{h.pageNumber}</div>
+                    <div className="text-xs text-gray-500">
+                      p.{h.pageNumber}
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <button

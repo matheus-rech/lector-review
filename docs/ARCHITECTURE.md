@@ -1,6 +1,7 @@
 # Lector Review - Architecture Documentation
 
 ## Table of Contents
+
 - [System Overview](#system-overview)
 - [Component Hierarchy](#component-hierarchy)
 - [Data Flow](#data-flow)
@@ -81,14 +82,14 @@ App.tsx (Root Container)
 
 ### Component Responsibilities
 
-| Component | Responsibility | State Management |
-|-----------|----------------|------------------|
-| **App.tsx** | Main container, orchestration | All application state |
-| **PDFViewerContent** | Lector hooks integration | Local PDF state |
-| **Modal** | Dialog display | Props-based |
-| **Toast** | Notifications | Context/Props |
-| **HelpModal** | Documentation | Props-based |
-| **Loading** | Loading indicator | Props-based |
+| Component            | Responsibility                | State Management      |
+| -------------------- | ----------------------------- | --------------------- |
+| **App.tsx**          | Main container, orchestration | All application state |
+| **PDFViewerContent** | Lector hooks integration      | Local PDF state       |
+| **Modal**            | Dialog display                | Props-based           |
+| **Toast**            | Notifications                 | Context/Props         |
+| **HelpModal**        | Documentation                 | Props-based           |
+| **Loading**          | Loading indicator             | Props-based           |
 
 ---
 
@@ -133,7 +134,7 @@ function App() {
   const { jumpToPage } = usePdfJump(); // ERROR!
 
   return (
-    <Root documentSource={pdf}>
+    <Root source={pdf}>
       <Pages>
         <Page pageNumber={1}>
           <CanvasLayer />
@@ -146,7 +147,7 @@ function App() {
 // ✅ CORRECT - Hook called inside Root's children
 function App() {
   return (
-    <Root documentSource={pdf}>
+    <Root source={pdf}>
       <PDFViewerContent /> {/* Hooks work here */}
     </Root>
   );
@@ -164,24 +165,27 @@ function PDFViewerContent() {
 ### Lector Hooks API
 
 #### usePdfJump
+
 ```typescript
 const {
-  jumpToPage,        // (page: number) => void
+  jumpToPage, // (page: number) => void
   currentPageNumber, // number
-  totalPages         // number
+  totalPages, // number
 } = usePdfJump();
 ```
 
 #### useSearch
+
 ```typescript
 const {
-  searchResults,     // { exactMatches: SearchMatch[], totalMatches: number }
-  findExactMatches,  // (options: { searchText: string }) => void
-  clearSearch        // () => void
+  searchResults, // { exactMatches: SearchMatch[], totalMatches: number }
+  findExactMatches, // (options: { searchText: string }) => void
+  clearSearch, // () => void
 } = useSearch();
 ```
 
 #### useSelectionDimensions
+
 ```typescript
 const selectionDimensions = useSelectionDimensions();
 // Returns: { rects: Rect[], text: string, pageNumber: number } | null
@@ -289,11 +293,11 @@ ColoredHighlightLayer Renders
 
 ```typescript
 // Projects
-const [projects, setProjects] = useState<string[]>(['default']);
-const [currentProject, setCurrentProject] = useState<string>('default');
+const [projects, setProjects] = useState<string[]>(["default"]);
+const [currentProject, setCurrentProject] = useState<string>("default");
 
 // PDF
-const [source, setSource] = useState<string>('/Kim2016.pdf');
+const [source, setSource] = useState<string>("/Kim2016.pdf");
 const [currentPage, setCurrentPage] = useState<number>(1);
 
 // Data Extraction
@@ -302,7 +306,7 @@ const [pageForm, setPageForm] = useState<PageFormData>({});
 const [templates, setTemplates] = useState<PageTemplates>(defaultTemplates);
 
 // UI State
-const [searchTerm, setSearchTerm] = useState<string>('');
+const [searchTerm, setSearchTerm] = useState<string>("");
 const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 const [showHelp, setShowHelp] = useState<boolean>(false);
 ```
@@ -311,8 +315,11 @@ const [showHelp, setShowHelp] = useState<boolean>(false);
 
 ```typescript
 // PDFViewerContent
-const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
-const [searchHighlights, setSearchHighlights] = useState<LabeledHighlight[]>([]);
+const [pendingSelection, setPendingSelection] =
+  useState<PendingSelection | null>(null);
+const [searchHighlights, setSearchHighlights] = useState<LabeledHighlight[]>(
+  []
+);
 
 // Modal
 const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -323,15 +330,15 @@ const [toasts, setToasts] = useState<Toast[]>([]);
 
 ### State Persistence Strategy
 
-| Data Type | Storage | Key Pattern | Persistence |
-|-----------|---------|-------------|-------------|
-| Projects list | LocalStorage | `projects` | Always |
-| Current project | LocalStorage | `current-project` | Always |
-| Highlights | LocalStorage | `proj:{name}:highlights` | Per-project |
-| Form data | LocalStorage | `proj:{name}:pageForm` | Per-project |
-| Templates | LocalStorage | `proj:{name}:templates` | Per-project |
-| PDFs (future) | IndexedDB | `pdf:{id}` | Per-PDF |
-| Dark mode | LocalStorage | `dark-mode` | Global |
+| Data Type       | Storage      | Key Pattern              | Persistence |
+| --------------- | ------------ | ------------------------ | ----------- |
+| Projects list   | LocalStorage | `projects`               | Always      |
+| Current project | LocalStorage | `current-project`        | Always      |
+| Highlights      | LocalStorage | `proj:{name}:highlights` | Per-project |
+| Form data       | LocalStorage | `proj:{name}:pageForm`   | Per-project |
+| Templates       | LocalStorage | `proj:{name}:templates`  | Per-project |
+| PDFs (future)   | IndexedDB    | `pdf:{id}`               | Per-PDF     |
+| Dark mode       | LocalStorage | `dark-mode`              | Global      |
 
 ---
 
@@ -367,11 +374,11 @@ const fieldKey = `${pageNumber}:${fieldId}`;
 
 ### Storage Limits
 
-| Storage Type | Typical Limit | Use Case |
-|--------------|---------------|----------|
-| LocalStorage | 5-10 MB | Metadata, forms, small data |
-| IndexedDB | 50 MB+ | PDFs, large files |
-| SessionStorage | 5-10 MB | Temporary UI state |
+| Storage Type   | Typical Limit | Use Case                    |
+| -------------- | ------------- | --------------------------- |
+| LocalStorage   | 5-10 MB       | Metadata, forms, small data |
+| IndexedDB      | 50 MB+        | PDFs, large files           |
+| SessionStorage | 5-10 MB       | Temporary UI state          |
 
 ---
 
@@ -380,6 +387,7 @@ const fieldKey = `${pageNumber}:${fieldId}`;
 ### React Optimizations
 
 #### 1. Memoization
+
 ```typescript
 // Expensive computations
 const currentPageTemplate = useMemo(
@@ -389,22 +397,27 @@ const currentPageTemplate = useMemo(
 
 // Filtered data
 const pageHighlights = useMemo(
-  () => highlights.filter(h => h.pageNumber === currentPage),
+  () => highlights.filter((h) => h.pageNumber === currentPage),
   [highlights, currentPage]
 );
 ```
 
 #### 2. Callback Optimization
+
 ```typescript
-const handleFieldChange = useCallback((fieldId: string, value: string) => {
-  setPageForm(prev => ({
-    ...prev,
-    [`${currentPage}:${fieldId}`]: value
-  }));
-}, [currentPage]);
+const handleFieldChange = useCallback(
+  (fieldId: string, value: string) => {
+    setPageForm((prev) => ({
+      ...prev,
+      [`${currentPage}:${fieldId}`]: value,
+    }));
+  },
+  [currentPage]
+);
 ```
 
 #### 3. Debouncing
+
 ```typescript
 // Search input (500ms)
 const debouncedSearch = useDebounce(searchTerm, 500);
@@ -437,6 +450,7 @@ useEffect(() => {
 ### Pending Component Integrations
 
 #### 1. PDF Upload
+
 **Location:** `src/components/PDFUpload.tsx`, `src/utils/pdfStorage.ts`
 **Integration Point:** App.tsx sidebar
 **Estimated Effort:** 2 hours
@@ -454,24 +468,29 @@ const { pdfs, currentPDF, addPDF, removePDF, selectPDF } = usePDFManager();
 ```
 
 #### 2. Template Manager
+
 **Location:** `src/components/TemplateManager.tsx`
 **Integration Point:** App.tsx modal
 **Estimated Effort:** 2 hours
 
 ```typescript
-<Modal isOpen={showTemplateManager} onClose={() => setShowTemplateManager(false)}>
+<Modal
+  isOpen={showTemplateManager}
+  onClose={() => setShowTemplateManager(false)}
+>
   <TemplateManager templates={templates} onUpdate={setTemplates} />
 </Modal>
 ```
 
 #### 3. Schema Forms
+
 **Location:** `src/components/SchemaForm.tsx`, `src/utils/schemaParser.ts`
 **Integration Point:** Replace current form system
 **Estimated Effort:** 3 hours
 
 ```typescript
-import { SchemaForm } from '@/components';
-import { parseSchema } from '@/utils';
+import { SchemaForm } from "@/components";
+import { parseSchema } from "@/utils";
 
 const parsedSchema = parseSchema(schemaJSON);
 
@@ -480,7 +499,7 @@ const parsedSchema = parseSchema(schemaJSON);
   page={currentPage}
   data={pageForm}
   onChange={handleFieldChange}
-/>
+/>;
 ```
 
 ---
@@ -497,12 +516,12 @@ const parsedSchema = parseSchema(schemaJSON);
 
 ### Trade-offs
 
-| Decision | Pros | Cons |
-|----------|------|------|
-| Client-side only | Simple deployment, no server costs, privacy | No collaboration, limited by browser storage |
-| LocalStorage | Fast, simple API, synchronous | 5-10MB limit, no encryption |
-| Single component (App.tsx) | Simple state management | Can become large (current: 800+ lines) |
-| Lector library | Excellent PDF rendering, hooks API | Learning curve for context requirements |
+| Decision                   | Pros                                        | Cons                                         |
+| -------------------------- | ------------------------------------------- | -------------------------------------------- |
+| Client-side only           | Simple deployment, no server costs, privacy | No collaboration, limited by browser storage |
+| LocalStorage               | Fast, simple API, synchronous               | 5-10MB limit, no encryption                  |
+| Single component (App.tsx) | Simple state management                     | Can become large (current: 800+ lines)       |
+| Lector library             | Excellent PDF rendering, hooks API          | Learning curve for context requirements      |
 
 ### Future Considerations
 
