@@ -27,7 +27,7 @@ import {
   calculateHighlightRects,
 } from "@anaralabs/lector";
 import { Toast, useToast } from "./components/Toast";
-import { Modal } from "./components/Modal";
+import { Modal, InputModal, ConfirmModal } from "./components/Modal";
 import { PDFUpload, PDFList } from "./components";
 import { TemplateManager } from "./components/TemplateManager";
 import { SchemaForm } from "./components/SchemaForm";
@@ -99,6 +99,7 @@ function PDFViewerContent({
   onPageChange,
   onJumpToPageReady,
   onSearchResultsData,
+  onRequestHighlightLabel,
 }: {
   highlights: LabeledHighlight[];
   onAddHighlight: (rect: Rect, pageNumber: number, label: string) => void;
@@ -106,8 +107,9 @@ function PDFViewerContent({
   onSearchResultsChange: (count: number) => void;
   onUpdateSearchHighlights: (searchHighlights: LabeledHighlight[]) => void;
   onPageChange: (page: number, total: number) => void;
-  onJumpToPageReady: (jumpFn: (page: number) => void) => void;
+  onJumpToPageReady: (jumpFn: (page: number, options?: { behavior: "auto" }) => void) => void;
   onSearchResultsData: (results: any[]) => void;
+  onRequestHighlightLabel: (rect: Rect, pageNumber: number, defaultLabel: string, onConfirm: (label: string) => void) => void;
 }) {
   // Use Lector hooks
   const selectionDimensions = useSelectionDimensions();
@@ -117,13 +119,29 @@ function PDFViewerContent({
   // Access getPdfPageProxy safely through the pdf object
   const totalPages = pdf?.numPages || 0;
   const { searchResults, search } = useSearch();
-  
-  // Expose jumpToPage function to parent
+
+  // Track if we've already set up jumpToPage
+  const hasSetupJumpToPage = useRef(false);
+
+  // Expose jumpToPage function to parent once on mount
   useEffect(() => {
-    if (jumpToPage) {
+    console.log('[PDFViewerContent] useEffect triggered - jumpToPage available:', !!jumpToPage, 'hasSetupJumpToPage:', hasSetupJumpToPage.current);
+    if (jumpToPage && !hasSetupJumpToPage.current) {
+      console.log('[PDFViewerContent] Calling onJumpToPageReady with jumpToPage function');
       onJumpToPageReady(jumpToPage);
+      hasSetupJumpToPage.current = true;
+      console.log('[PDFViewerContent] onJumpToPageReady called successfully, hasSetupJumpToPage set to true');
+    } else if (!jumpToPage) {
+      console.warn('[PDFViewerContent] jumpToPage is undefined/null, cannot call onJumpToPageReady');
+    } else {
+      console.log('[PDFViewerContent] jumpToPage already set up, skipping onJumpToPageReady call');
     }
   }, [jumpToPage, onJumpToPageReady]);
+
+  // Debug: Log when jumpToPage is available
+  useEffect(() => {
+    console.log('[PDFViewerContent] State - jumpToPage:', !!jumpToPage, 'currentPage:', currentPageNumber, 'totalPages:', totalPages);
+  }, [jumpToPage, currentPageNumber, totalPages]);
   
   // Notify parent of page changes
   useEffect(() => {
@@ -251,14 +269,14 @@ function PDFViewerContent({
   // Handle highlight creation from pending selection
   const createHighlightFromSelection = useCallback(() => {
     if (pendingSelection) {
-      const label = prompt("Enter highlight label:", pendingSelection.text.substring(0, 50));
-      if (label) {
-        const rect = pendingSelection.rects[0];
+      const rect = pendingSelection.rects[0];
+      const defaultLabel = pendingSelection.text.substring(0, 50);
+      onRequestHighlightLabel(rect, pendingSelection.pageNumber, defaultLabel, (label) => {
         onAddHighlight(rect, pendingSelection.pageNumber, label);
-      }
-      setPendingSelection(null);
+        setPendingSelection(null);
+      });
     }
-  }, [pendingSelection, onAddHighlight]);
+  }, [pendingSelection, onAddHighlight, onRequestHighlightLabel]);
   
   // Convert our highlights to ColoredHighlight format
   const coloredHighlights: ColoredHighlight[] = highlights.map((h) => ({
@@ -296,11 +314,22 @@ function PDFViewerContent({
       </SelectionTooltip>
 
       <Pages className="p-6">
-        <Page>
-          <CanvasLayer />
-          <TextLayer />
-          <ColoredHighlightLayer highlights={coloredHighlights} />
-        </Page>
+        {totalPages > 0 ? (
+          Array.from({ length: totalPages }, (_, index) => (
+            <Page key={index + 1}>
+              <CanvasLayer />
+              <TextLayer />
+              <ColoredHighlightLayer highlights={coloredHighlights} />
+            </Page>
+          ))
+        ) : (
+          // Render single page initially to allow PDF to load
+          <Page>
+            <CanvasLayer />
+            <TextLayer />
+            <ColoredHighlightLayer highlights={coloredHighlights} />
+          </Page>
+        )}
       </Pages>
     </div>
   );
@@ -396,7 +425,40 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(9);
   const [pageInputValue, setPageInputValue] = useState("1");
-  const [jumpToPageFn, setJumpToPageFn] = useState<((page: number) => void) | null>(null);
+  const jumpToPageFn = useRef<((page: number, options?: { behavior: "auto" }) => void) | null>(null);
+  const [isJumpToPageReady, setIsJumpToPageReady] = useState(false);
+
+  /** Input Modal State */
+  const [inputModalState, setInputModalState] = useState<{
+    isOpen: boolean;
+    type: 'highlight' | 'project' | 'relabel' | null;
+    title: string;
+    message: string;
+    defaultValue: string;
+    onConfirm: (value: string) => void;
+  }>({
+    isOpen: false,
+    type: null,
+    title: '',
+    message: '',
+    defaultValue: '',
+    onConfirm: () => {},
+  });
+
+  /** Confirm Modal State */
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type?: 'info' | 'warning' | 'danger';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    type: 'info',
+  });
 
   // Sync page input with current page
   useEffect(() => {
@@ -404,8 +466,11 @@ export default function App() {
   }, [currentPage]);
 
   /** Handle jumpToPage ready from PDFViewerContent */
-  const handleJumpToPageReady = useCallback((jumpFn: (page: number) => void) => {
-    setJumpToPageFn(() => jumpFn);
+  const handleJumpToPageReady = useCallback((jumpFn: (page: number, options?: { behavior: "auto" }) => void) => {
+    console.log('[App.handleJumpToPageReady] Received jumpFn from PDFViewerContent');
+    jumpToPageFn.current = jumpFn;
+    setIsJumpToPageReady(true);
+    console.log('[App.handleJumpToPageReady] jumpToPageFn.current is now set, isJumpToPageReady=true');
   }, []);
 
   // Schema parsing
@@ -477,14 +542,23 @@ export default function App() {
 
   /** Add/Delete projects */
   const addProject = () => {
-    const name = prompt("New project name?");
-    if (name && !projects.includes(name)) {
-      setProjects([...projects, name]);
-      switchProject(name);
-      success(`Project "${name}" created`);
-    } else if (name && projects.includes(name)) {
-      error("Project name already exists");
-    }
+    setInputModalState({
+      isOpen: true,
+      type: 'project',
+      title: 'Create New Project',
+      message: 'Enter a name for the new project:',
+      defaultValue: '',
+      onConfirm: (name) => {
+        if (!projects.includes(name)) {
+          setProjects([...projects, name]);
+          switchProject(name);
+          success(`Project "${name}" created`);
+        } else {
+          error("Project name already exists");
+        }
+        setInputModalState(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   const deleteProject = () => {
@@ -492,15 +566,22 @@ export default function App() {
       error("Cannot delete default project");
       return;
     }
-    if (confirm(`Delete project "${currentProject}"?`)) {
-      const newProjects = projects.filter((p) => p !== currentProject);
-      setProjects(newProjects);
-      localStorage.removeItem(`proj:${currentProject}:highlights`);
-      localStorage.removeItem(`proj:${currentProject}:templates`);
-      localStorage.removeItem(`proj:${currentProject}:pageForm`);
-      switchProject("default");
-      success(`Project "${currentProject}" deleted`);
-    }
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Delete Project',
+      message: `Are you sure you want to delete project "${currentProject}"? This action cannot be undone.`,
+      type: 'danger',
+      onConfirm: () => {
+        const newProjects = projects.filter((p) => p !== currentProject);
+        setProjects(newProjects);
+        localStorage.removeItem(`proj:${currentProject}:highlights`);
+        localStorage.removeItem(`proj:${currentProject}:templates`);
+        localStorage.removeItem(`proj:${currentProject}:pageForm`);
+        switchProject("default");
+        success(`Project "${currentProject}" deleted`);
+        setConfirmModalState(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   /** Add highlight */
@@ -523,13 +604,20 @@ export default function App() {
   const relabelHighlight = (id: string) => {
     const h = highlights.find((x) => x.id === id);
     if (!h) return;
-    const newLabel = prompt("New label?", h.label);
-    if (newLabel) {
-      setHighlights((prev) =>
-        prev.map((x) => (x.id === id ? { ...x, label: newLabel } : x))
-      );
-      success("Highlight updated");
-    }
+    setInputModalState({
+      isOpen: true,
+      type: 'relabel',
+      title: 'Edit Highlight Label',
+      message: 'Enter a new label for this highlight:',
+      defaultValue: h.label,
+      onConfirm: (newLabel) => {
+        setHighlights((prev) =>
+          prev.map((x) => (x.id === id ? { ...x, label: newLabel } : x))
+        );
+        success("Highlight updated");
+        setInputModalState(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   /** Delete highlight */
@@ -538,15 +626,44 @@ export default function App() {
     success("Highlight deleted");
   };
 
+  /** Request highlight label - opens modal */
+  const handleRequestHighlightLabel = useCallback((rect: Rect, pageNumber: number, defaultLabel: string, onConfirm: (label: string) => void) => {
+    setInputModalState({
+      isOpen: true,
+      type: 'highlight',
+      title: 'Create Highlight',
+      message: 'Enter a label for this highlight:',
+      defaultValue: defaultLabel,
+      onConfirm: (label) => {
+        onConfirm(label);
+        setInputModalState(prev => ({ ...prev, isOpen: false }));
+      },
+    });
+  }, []);
+
   /** Jump to page */
   const jumpToPage = useCallback((page: number) => {
-    if (page < 1 || page > totalPages) return;
-    if (jumpToPageFn) {
-      jumpToPageFn(page);
-    } else {
-      setCurrentPage(page);
+    console.log('[App.jumpToPage] Called with page:', page, 'totalPages:', totalPages, 'isReady:', isJumpToPageReady);
+    console.log('[App.jumpToPage] jumpToPageFn.current:', jumpToPageFn.current);
+
+    if (page < 1 || page > totalPages) {
+      console.log('[App.jumpToPage] Page out of bounds, returning');
+      return;
     }
-  }, [totalPages, jumpToPageFn]);
+
+    if (jumpToPageFn.current) {
+      console.log('[App.jumpToPage] Calling Lector jumpToPage with page:', page);
+      try {
+        jumpToPageFn.current(page, { behavior: "auto" });
+        console.log('[App.jumpToPage] Lector jumpToPage called successfully');
+      } catch (err) {
+        console.error('[App.jumpToPage] Error calling Lector jumpToPage:', err);
+      }
+    } else {
+      console.warn('[App.jumpToPage] jumpToPageFn.current is NULL - Lector hook not ready!');
+      console.warn('[App.jumpToPage] This means navigation will NOT work');
+    }
+  }, [totalPages, isJumpToPageReady]);
 
   /** PDF Upload handlers */
   const handlePDFUpload = async (file: File) => {
@@ -663,12 +780,12 @@ export default function App() {
 
   /** Navigate to specific search result */
   const jumpToSearchResult = useCallback((index: number) => {
-    if (searchResultsData[index] && jumpToPageFn) {
+    if (searchResultsData[index] && jumpToPageFn.current) {
       const result = searchResultsData[index];
-      jumpToPageFn(result.pageNumber);
+      jumpToPageFn.current(result.pageNumber);
       setCurrentSearchIndex(index);
     }
-  }, [searchResultsData, jumpToPageFn]);
+  }, [searchResultsData]);
 
   /** Navigate to next search result */
   const nextSearchResult = useCallback(() => {
@@ -697,6 +814,27 @@ export default function App() {
     <div className="flex h-screen bg-gray-50">
       {/* Toast notifications */}
       <Toast toasts={toasts} onRemove={removeToast} />
+
+      {/* Input Modal */}
+      <InputModal
+        isOpen={inputModalState.isOpen}
+        onClose={() => setInputModalState(prev => ({ ...prev, isOpen: false }))}
+        title={inputModalState.title}
+        message={inputModalState.message}
+        defaultValue={inputModalState.defaultValue}
+        onConfirm={inputModalState.onConfirm}
+        placeholder="Enter value..."
+      />
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        onClose={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        onConfirm={confirmModalState.onConfirm}
+        type={confirmModalState.type}
+      />
 
       {/* Left sidebar */}
       <aside className="w-64 border-r p-3 space-y-4 bg-white overflow-y-auto">
@@ -874,6 +1012,7 @@ export default function App() {
                   onPageChange={handlePageChange}
                   onJumpToPageReady={handleJumpToPageReady}
                   onSearchResultsData={handleSearchResultsData}
+                  onRequestHighlightLabel={handleRequestHighlightLabel}
                 />
               </div>
             </div>
@@ -917,7 +1056,7 @@ export default function App() {
                   className="w-12 px-2 py-1 border rounded text-center text-xs"
                   aria-label="Go to page"
                 />
-                <span className="text-xs text-gray-500">/ {totalPages}</span>
+                <span className="text-xs text-gray-500">{currentPage} / {totalPages}</span>
               </div>
 
               <button

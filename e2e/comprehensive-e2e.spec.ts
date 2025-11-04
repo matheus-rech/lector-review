@@ -174,17 +174,21 @@ test.describe('Lector Review - Comprehensive E2E Tests', () => {
   });
 
   test('should create a new project', async ({ page }) => {
-    // Set up dialog handler BEFORE clicking
-    const dialogPromise = page.waitForEvent('dialog');
-    
     // Click add project button
     const addButton = page.getByRole('button', { name: /Add project/i }).first();
     await addButton.click();
 
-    // Handle prompt dialog
-    const dialog = await dialogPromise;
-    await dialog.accept('e2e-test-project');
-    await page.waitForTimeout(2000);
+    // Wait for modal to appear
+    await expect(page.getByText('Create New Project')).toBeVisible();
+
+    // Fill in project name
+    await page.getByPlaceholder('Enter value...').fill('e2e-test-project');
+
+    // Click confirm button
+    await page.getByRole('button', { name: 'Confirm' }).click();
+
+    // Wait for modal to close
+    await expect(page.getByText('Create New Project')).not.toBeVisible();
 
     // Verify project appears in selector
     const projectSelect = page.locator('select').first();

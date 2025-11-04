@@ -9,11 +9,11 @@ test.describe('Lector Review - Basic Features', () => {
 
   test('should load the application', async ({ page }) => {
     await expect(page).toHaveTitle(/Lector Review|Vite \+ React/);
-    
+
     // Check for main UI elements
     await expect(page.getByText('Project')).toBeVisible();
     await expect(page.getByText('PDF Management')).toBeVisible();
-    await expect(page.getByText('Search')).toBeVisible();
+    await expect(page.getByText('Search').first()).toBeVisible();
   });
 
   test('should display PDF viewer', async ({ page }) => {
@@ -26,18 +26,29 @@ test.describe('Lector Review - Basic Features', () => {
   });
 
   test('should navigate between pages', async ({ page }) => {
+    // Listen to console logs
+    page.on('console', msg => {
+      if (msg.text().includes('[App.jumpToPage]') || msg.text().includes('[PDFViewerContent]')) {
+        console.log('BROWSER:', msg.text());
+      }
+    });
+
     // Check initial page
     await expect(page.getByText(/1 \/ \d+/)).toBeVisible();
-    
-    // Click next page button
+
+    console.log('===== CLICKING NEXT PAGE BUTTON =====');
+    // Click next page button and wait for page indicator to update
     await page.getByRole('button', { name: 'Next page' }).click();
-    await page.waitForTimeout(500);
-    await expect(page.getByText(/2 \/ \d+/)).toBeVisible();
-    
-    // Click previous page button
+
+    // Wait longer for smooth scrolling animation to complete
+    await page.waitForTimeout(2000);
+
+    console.log('===== CHECKING IF PAGE CHANGED TO 2 =====');
+    await expect(page.getByText(/2 \/ \d+/)).toBeVisible({ timeout: 5000 });
+
+    // Click previous page button and wait for page indicator to update
     await page.getByRole('button', { name: 'Previous page' }).click();
-    await page.waitForTimeout(500);
-    await expect(page.getByText(/1 \/ \d+/)).toBeVisible();
+    await expect(page.getByText(/1 \/ \d+/)).toBeVisible({ timeout: 3000 });
   });
 
   test('should enter and persist data', async ({ page }) => {
@@ -45,15 +56,15 @@ test.describe('Lector Review - Basic Features', () => {
     const studyIdInput = page.getByPlaceholder(/10.1161\/STROKEAHA/);
     if (await studyIdInput.isVisible().catch(() => false)) {
       await studyIdInput.fill('10.1234/test.2024');
-      
-      // Navigate to another page
+
+      // Navigate to another page and wait for page indicator
       await page.getByRole('button', { name: 'Next page' }).click();
-      await page.waitForTimeout(500);
-      
-      // Navigate back
+      await expect(page.getByText(/2 \/ \d+/)).toBeVisible({ timeout: 3000 });
+
+      // Navigate back and wait for page indicator
       await page.getByRole('button', { name: 'Previous page' }).click();
-      await page.waitForTimeout(500);
-      
+      await expect(page.getByText(/1 \/ \d+/)).toBeVisible({ timeout: 3000 });
+
       // Check data persists
       await expect(studyIdInput).toHaveValue('10.1234/test.2024');
     }
