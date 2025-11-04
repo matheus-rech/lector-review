@@ -1,143 +1,126 @@
-import { useState, useEffect } from "react";
+"use client";
+
 import {
-  useSearch,
-  usePdf,
-  usePdfJump,
   calculateHighlightRects,
   SearchResult,
+  usePdf,
+  usePdfJump,
+  useSearch,
 } from "@anaralabs/lector";
 import { useDebounce } from "use-debounce";
+import { useEffect, useState } from "react";
+
+// Define the TextPosition interface
+interface TextPosition {
+  pageNumber: number;
+  text: string;
+  matchIndex: number;
+  searchText?: string;
+}
 
 interface ResultItemProps {
   result: SearchResult;
   originalSearchText: string;
-  type: "exact" | "fuzzy";
 }
 
-const ResultItem = ({ result, originalSearchText, type }: ResultItemProps) => {
+// Result item component - matches official docs exactly
+const ResultItem = ({ result, originalSearchText }: ResultItemProps) => {
   const { jumpToHighlightRects } = usePdfJump();
   const getPdfPageProxy = usePdf((state) => state.getPdfPageProxy);
 
   const onClick = async () => {
-    try {
-      const pageProxy = getPdfPageProxy(result.pageNumber);
-      const rects = await calculateHighlightRects(pageProxy, {
-        pageNumber: result.pageNumber,
-        text: result.text,
-        matchIndex: result.matchIndex,
-        searchText: originalSearchText, // Pass searchText for exact term highlighting
-      });
-      jumpToHighlightRects(rects, "pixels");
-    } catch (error) {
-      console.error("Error highlighting search result:", error);
-    }
+    const pageProxy = getPdfPageProxy(result.pageNumber);
+    const rects = await calculateHighlightRects(pageProxy, {
+      pageNumber: result.pageNumber,
+      text: result.text,
+      matchIndex: result.matchIndex,
+      searchText: originalSearchText, // Pass searchText for exact term highlighting
+    });
+    jumpToHighlightRects(rects, "pixels");
   };
 
   return (
     <div
-      className="p-2 cursor-pointer hover:bg-blue-50 border-b last:border-b-0"
+      className="flex py-2 hover:bg-gray-50 flex-col cursor-pointer"
       onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
     >
-      <div className="flex items-center justify-between">
-        <div className="font-medium text-blue-700">Page {result.pageNumber}</div>
-        <span
-          className={`text-[10px] px-1.5 py-0.5 rounded ${
-            type === "exact"
-              ? "bg-green-100 text-green-700"
-              : "bg-orange-100 text-orange-700"
-          }`}
-        >
-          {type === "exact" ? "✓ Exact" : "≈ Fuzzy"}
-        </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-gray-900">{result.text}</p>
       </div>
-      <div className="text-gray-600 text-xs truncate">
-        {result.text?.substring(0, 60) || "Match found"}...
+      <div className="flex items-center gap-4 text-sm text-gray-500">
+        <span className="ml-auto">Page {result.pageNumber}</span>
       </div>
     </div>
   );
 };
 
+// Search UI component - matches official docs exactly
 export function SearchUI() {
   const [searchText, setSearchText] = useState("");
   const [debouncedSearchText] = useDebounce(searchText, 500);
+  const [limit, setLimit] = useState(5);
   const { searchResults: results, search } = useSearch();
 
   useEffect(() => {
-    if (debouncedSearchText) {
-      search(debouncedSearchText, { limit: 50 });
-    }
+    setLimit(5);
+    search(debouncedSearchText, { limit: 5 });
   }, [debouncedSearchText, search]);
 
-  const totalMatches =
-    results.exactMatches.length + results.fuzzyMatches.length;
+  const handleLoadMore = async () => {
+    const newLimit = limit + 5;
+    await search(debouncedSearchText, { limit: newLimit });
+    setLimit(newLimit);
+  };
 
   return (
-    <div className="space-y-2">
-      <label className="text-xs font-semibold">Search</label>
-      <input
-        type="text"
-        value={searchText}
-        onChange={(e) => setSearchText(e.target.value)}
-        placeholder="Search in PDF..."
-        className="w-full border p-1 rounded text-sm"
-        aria-label="Search in PDF"
-      />
+    <div className="flex flex-col w-80 h-full">
+      <div className="px-4 py-4 border-b border-gray-200 bg-white">
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Search in document..."
+          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 bg-white">
+        <div className="py-4">
+          {!searchText ? null : !results.exactMatches.length &&
+            !results.fuzzyMatches.length ? (
+            <div className="text-center py-4 text-gray-500">
+              No results found
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {results.exactMatches.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-gray-700">
+                    Exact Matches
+                  </h3>
+                  <div className="divide-y divide-gray-100">
+                    {results.exactMatches.map((result) => (
+                      <ResultItem
+                        key={`${result.pageNumber}-${result.matchIndex}`}
+                        result={result}
+                        originalSearchText={searchText}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
-      {totalMatches > 0 && (
-        <>
-          <div className="text-xs text-gray-600">
-            {totalMatches} {totalMatches === 1 ? "match" : "matches"} found
-          </div>
-
-          <div className="max-h-40 overflow-y-auto border rounded text-xs bg-white">
-            {results.exactMatches.length > 0 && (
-              <>
-                {results.exactMatches.map((result, index) => (
-                  <ResultItem
-                    key={`exact-${result.pageNumber}-${result.matchIndex}-${index}`}
-                    result={result}
-                    originalSearchText={searchText}
-                    type="exact"
-                  />
-                ))}
-              </>
-            )}
-
-            {results.fuzzyMatches.length > 0 && (
-              <>
-                {results.fuzzyMatches.map((result, index) => (
-                  <ResultItem
-                    key={`fuzzy-${result.pageNumber}-${result.matchIndex}-${index}`}
-                    result={result}
-                    originalSearchText={searchText}
-                    type="fuzzy"
-                  />
-                ))}
-              </>
-            )}
-          </div>
-
-          {totalMatches > 10 && (
-            <div className="text-xs text-center text-gray-500 italic">
-              Showing first 10 of {totalMatches} results
+              {results.hasMoreResults && (
+                <button
+                  onClick={handleLoadMore}
+                  className="w-full py-2 px-4 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Load More Results
+                </button>
+              )}
             </div>
           )}
-        </>
-      )}
-
-      {searchText && totalMatches === 0 && (
-        <div className="text-xs text-center text-gray-500 py-2">
-          No results found
         </div>
-      )}
+      </div>
     </div>
   );
 }
